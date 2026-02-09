@@ -168,8 +168,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ courses: enrichedCourses, totalCourses });
 
   } catch (error) {
-    console.error('[COURSES_GET_ERROR]', error);
-    return NextResponse.json({ message: 'Error al obtener los cursos' }, { status: 500 });
+    console.error('[COURSES_GET_ERROR] Detailed error:', error);
+    return NextResponse.json({
+      message: 'Error al obtener los cursos',
+      details: (error as Error).message
+    }, { status: 500 });
   }
 }
 

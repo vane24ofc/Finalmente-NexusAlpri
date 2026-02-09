@@ -22,15 +22,24 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/co
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTitle } from '@/contexts/title-context';
 import { useDebounce } from '@/hooks/use-debounce';
-import { RichTextEditor } from './ui/rich-text-editor';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import YouTube from 'react-youtube';
 import mammoth from 'mammoth';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { PdfViewer } from '@/components/pdf-viewer';
+import dynamic from 'next/dynamic';
 import { getYoutubeVideoId } from '@/lib/resource-utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ColorfulLoader } from './ui/colorful-loader';
+
+const RichTextEditor = dynamic(
+    () => import('./ui/rich-text-editor').then((mod) => mod.RichTextEditor),
+    { ssr: false, loading: () => <div className="h-40 bg-muted animate-pulse rounded-md" /> }
+);
+
+const PdfViewer = dynamic(
+    () => import('@/components/pdf-viewer').then((mod) => mod.PdfViewer),
+    { ssr: false, loading: () => <div className="h-96 bg-muted animate-pulse rounded-md" /> }
+);
 
 const noteColors = [
     { value: 'yellow', bg: 'bg-yellow-100 dark:bg-yellow-900/40', border: 'border-yellow-200 dark:border-yellow-800/50' },
@@ -305,6 +314,11 @@ export function CourseViewer({ courseId }: CourseViewerProps) {
         return new Set(courseProgress?.completedLessons?.map(l => l.lessonId) || []);
     }, [courseProgress]);
 
+    const isCreatorViewingCourse = useMemo(() => {
+        if (!user || !course) return false;
+        return user.role === 'ADMINISTRATOR' || (user.role === 'INSTRUCTOR' && user.id === course.instructorId);
+    }, [user, course]);
+
     const isLessonLocked = useCallback((lessonId: string) => {
         if (isCreatorViewingCourse) return false;
         const currentLessonIndex = allLessons.findIndex(l => l.id === lessonId);
@@ -313,12 +327,6 @@ export function CourseViewer({ courseId }: CourseViewerProps) {
         // Strict linear progression: all previous lessons must be completed
         return allLessons.slice(0, currentLessonIndex).some(l => !completedLessonIds.has(l.id));
     }, [allLessons, completedLessonIds, isCreatorViewingCourse]);
-
-
-    const isCreatorViewingCourse = useMemo(() => {
-        if (!user || !course) return false;
-        return user.role === 'ADMINISTRATOR' || (user.role === 'INSTRUCTOR' && user.id === course.instructorId);
-    }, [user, course]);
 
     const fetchProgress = useCallback(async (userId: string, courseId: string) => {
         try {

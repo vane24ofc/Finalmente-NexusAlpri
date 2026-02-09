@@ -18,6 +18,8 @@ interface ApiCourseForManage extends Omit<PrismaCourse, 'instructor' | 'status' 
     user: { id: string; name: string | null; email: string; avatar: string | null };
     progress: { progressPercentage: number; completedLessons: any[] } | null;
   }[];
+  prerequisite?: { id: string; title: string } | null;
+  prerequisiteCompleted?: boolean;
 }
 
 export function mapApiCourseToAppCourse(apiCourse: ApiCourseForManage): AppCourseType {
@@ -44,6 +46,9 @@ export function mapApiCourseToAppCourse(apiCourse: ApiCourseForManage): AppCours
   return {
     id: apiCourse.id,
     title: apiCourse.title,
+    createdAt: apiCourse.createdAt,
+    updatedAt: apiCourse.updatedAt,
+    publicationDate: apiCourse.publicationDate,
     // Importante: La limpieza de HTML (<p>) se hace en el COMPONENTE (CourseCard) 
     // usando dangerouslySetInnerHTML para que no aparezcan las etiquetas [cite: 84]
     description: apiCourse.description || '',
@@ -57,7 +62,7 @@ export function mapApiCourseToAppCourse(apiCourse: ApiCourseForManage): AppCours
       name: 'Sin instructor',
       avatar: null,
     },
-    instructorId: apiCourse.instructorId || undefined,
+    instructorId: apiCourse.instructorId,
     imageUrl: apiCourse.imageUrl ?? null,
     // Aseguramos que tome el conteo de la propiedad correcta [cite: 18, 96, 100]
     modulesCount: (apiCourse._count?.modules ?? (Array.isArray(apiCourse.modules) ? apiCourse.modules.length : 0)),
@@ -65,11 +70,12 @@ export function mapApiCourseToAppCourse(apiCourse: ApiCourseForManage): AppCours
     enrollmentsCount: (apiCourse._count?.enrollments ?? (Array.isArray(apiCourse.enrollments) ? apiCourse.enrollments.length : 0)),
     averageCompletion: computedAverageCompletion ?? 0,
     status: apiCourse.status,
-    modules: [], 
+    modules: [],
     isEnrolled: undefined,
     isMandatory: apiCourse.isMandatory || false,
-    prerequisite: (apiCourse as any).prerequisite,
-    prerequisiteCompleted: (apiCourse as any).prerequisiteCompleted,
+    prerequisiteId: apiCourse.prerequisiteId,
+    prerequisite: apiCourse.prerequisite || null,
+    prerequisiteCompleted: apiCourse.prerequisiteCompleted,
     certificateTemplateId: apiCourse.certificateTemplateId
   };
 }

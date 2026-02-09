@@ -1,5 +1,5 @@
 // src/types.ts
-import type { Prisma, User as PrismaUser } from '@prisma/client';
+import type { Prisma, User as PrismaUser, Course as PrismaCourse, EnterpriseResource as PrismaEnterpriseResource, Form as PrismaForm, FormField as PrismaFormField, RecurrenceType } from '@prisma/client';
 
 // --- USER & AUTH ---
 export type UserRole = 'ADMINISTRATOR' | 'INSTRUCTOR' | 'STUDENT';
@@ -150,7 +150,7 @@ export type CoursePrerequisiteInfo = {
     title: string;
 } | null;
 
-export interface Course extends Omit<Prisma.CourseGetPayload<{}>, 'instructor' | 'prerequisite' | 'isMandatory' | 'startDate' | 'endDate' | 'certificateTemplateId'> {
+export interface Course extends Omit<PrismaCourse, 'instructor' | 'prerequisite' | 'isMandatory' | 'startDate' | 'endDate' | 'certificateTemplateId' | 'publicationDate'> {
     instructor: {
         id: string;
         name: string;
@@ -214,7 +214,7 @@ export type ResourceType = 'FOLDER' | 'DOCUMENT' | 'GUIDE' | 'MANUAL' | 'POLICY'
 export type ResourceStatus = 'ACTIVE' | 'ARCHIVED';
 export type ResourceSharingMode = 'PUBLIC' | 'PRIVATE' | 'PROCESS';
 
-export interface AppResourceType extends Omit<Prisma.EnterpriseResourceGetPayload<{ include: { quiz: { include: { questions: { include: { options: true } } } }, sharedWithProcesses: true, collaborators: true } }>, 'tags' | 'status' | 'filetype'> {
+export interface AppResourceType extends Omit<PrismaEnterpriseResource, 'tags' | 'status' | 'filetype' | 'quiz'> {
     tags: string[];
     uploaderName: string;
     hasPin: boolean;
@@ -301,7 +301,7 @@ export interface CalendarEvent {
     creator?: { id: string, name: string | null };
     videoConferenceLink?: string | null;
     attachments: Attachment[];
-    recurrence: Prisma.RecurrenceType;
+    recurrence: RecurrenceType;
     recurrenceEndDate?: string | null;
     parentId?: string | null;
     isInteractive: boolean;
@@ -388,29 +388,26 @@ export { type MotivationalMessageTriggerType } from '@prisma/client';
 
 
 // --- FORMS ---
-export type FormFieldOption = Omit<Prisma.FormFieldOptionGetPayload<{}>, 'id'> & {
-    id: string; // Ensure id is always a string on the client
+export type FormFieldOption = {
+    id: string;
+    label?: string;
+    value?: string;
+    [key: string]: any;
 };
 
-export type AppQuestion = Omit<Prisma.FormFieldGetPayload<{
-    include: { options: true }
-}>, 'options' | 'id'> & {
+export type AppQuestion = Omit<PrismaFormField, 'options' | 'id'> & {
     id: string; // Client-side ID
     options: FormFieldOption[];
     text: string;
 };
 
 
-export type AppForm = Omit<Prisma.FormGetPayload<{
-    include: {
-        fields: { include: { options: true } },
-        _count: { select: { responses: true } },
-        creator: { select: { name: true } },
-        sharedWith: { select: { id: true, name: true, avatar: true } }
-    }
-}>, 'fields'> & {
+export type AppForm = Omit<PrismaForm, 'fields'> & {
     fields: AppQuestion[];
     timerStyle?: string | null;
+    _count?: { responses: number };
+    creator?: { name: string | null };
+    sharedWith?: { id: string; name: string | null; avatar: string | null }[];
 };
 
 // --- PROCESSES ---

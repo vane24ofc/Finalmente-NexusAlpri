@@ -1,950 +1,1455 @@
-// @ts-nocheck
 'use client';
 
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, PlusCircle, Trash2, UploadCloud, GripVertical, Loader2, AlertTriangle, ShieldAlert, ImagePlus, XCircle, Replace, Pencil, Eye, MoreVertical, Archive, Crop, Copy, FilePlus2, ChevronDown, BookOpenText, Video, FileText, Lightbulb, File as FileGenericIcon, BarChart3, Star, Layers3, SaveIcon, Sparkles, Award, Check, Calendar as CalendarIcon, Info, Users, BookOpen } from 'lucide-react';
+import { ArrowLeft, Save, PlusCircle, Trash2, UploadCloud, GripVertical, Loader2, AlertTriangle, ShieldAlert, ImagePlus, X, Replace, Pencil, Eye, FilePlus2, ChevronDown, BookOpenText, Video, FileText, File as FileGenericIcon, Layers3, Sparkles, Award, CheckCircle, Calendar as CalendarIcon, Info, Settings2, Globe as GlobeIcon, Target, Shield, Clock3, Layout, Sparkles as SparklesIcon, BookOpen, Zap, Target as TargetIcon, BarChart, Users, Tag, Hash, Lock, Unlock, Filter, Palette, EyeOff, ArrowRight, Check, Plus, Minus, Grid3x3, List, Eye as EyeIcon, Maximize2, Minimize2, FolderPlus, FolderOpen, Calendar, Timer, TrendingUp, BarChart2, PieChart, Download, Share2, Bell, Star, Edit, Copy, MoreHorizontal, ExternalLink, HelpCircle, AlertCircle, Info as InfoIcon, ChevronRight, ChevronLeft, FlipVertical, FlipHorizontal, SquareStack, PanelLeft, PanelRight, PanelsTopLeft, Layers } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import type { Course as AppCourse, Module as AppModule, Lesson as AppLesson, LessonType, CourseStatus, Quiz as AppQuiz, Question as AppQuestion, AnswerOption as AppAnswerOption, ContentBlock } from '@/types';
+import React, { useEffect, useState, useCallback, ChangeEvent, useMemo } from 'react';
+import type { Course as AppCourse, Module as AppModule, Lesson as AppLesson, LessonType, CourseStatus, Quiz as AppQuiz, ContentBlock } from '@/types';
 import Image from 'next/image';
 import { useToast } from "@/hooks/use-toast";
-import type { LessonTemplate, TemplateBlock, CertificateTemplate as PrismaCertificateTemplate } from '@prisma/client';
 import { useAuth } from '@/contexts/auth-context';
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from '@/components/ui/badge';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Progress } from '@/components/ui/progress';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, isValid } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { QuizGameView } from '@/components/quizz-it/quiz-game-view';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu";
-import { useTitle } from '@/contexts/title-context';
-import { QuizAnalyticsView } from '@/components/analytics/quiz-analytics-view';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion, AnimatePresence } from 'framer-motion';
+import { Switch } from '@/components/ui/switch';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { UploadArea } from '@/components/ui/upload-area';
 import { uploadWithProgress } from '@/lib/upload-with-progress';
-import { Switch } from '@/components/ui/switch';
 import { CourseAssignmentModal } from '@/components/course-assignment-modal';
 import { QuizEditorModal } from '@/components/quizz-it/quiz-editor-modal';
-import type { DateRange } from 'react-day-picker';
+import { useTitle } from '@/contexts/title-context';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Skeleton } from '@/components/ui/skeleton';
 
-// === TIPOS E INTERFACES ===
-interface ApiTemplate extends LessonTemplate {
-  templateBlocks: TemplateBlock[];
+// === TIPOS E INTERFACES OPTIMIZADOS ===
+interface InteractiveComponentData {
+  type: 'accordion' | 'flipCards' | 'tabs';
+  items: InteractiveItem[];
+  settings?: {
+    allowMultipleOpen?: boolean;
+    flipDirection?: 'horizontal' | 'vertical';
+    tabPosition?: 'top' | 'left' | 'right' | 'bottom';
+  };
+}
+
+interface InteractiveItem {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  imagePreview?: string;
+}
+
+interface ApiTemplate {
+  id: string;
+  name: string;
+  description: string;
+  templateBlocks: any[];
   creator: { name: string | null } | null;
 }
 
-interface LocalInstructor {
-    id: string;
-    name: string;
+interface PrismaCertificateTemplate {
+  id: string;
+  name: string;
 }
 
+// === UTILIDADES ===
 const generateUniqueId = (prefix: string): string => {
-    if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
-        return `${prefix}-${window.crypto.randomUUID()}`;
-    }
-    const timestamp = Date.now();
-    const randomPart = Math.random().toString(36).substring(2, 9);
-    return `${prefix}-${timestamp}-${randomPart}`;
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+    return `${prefix}-${window.crypto.randomUUID()}`;
+  }
+  const timestamp = Date.now();
+  const randomPart = Math.random().toString(36).substring(2, 9);
+  return `${prefix}-${timestamp}-${randomPart}`;
 };
 
+// === COMPONENTES REUTILIZABLES ===
 
-const ModuleItem = React.forwardRef<HTMLDivElement, { module: AppModule; onUpdate: (field: keyof AppModule, value: any) => void; onAddLesson: (type: 'blank' | 'template') => void; onLessonUpdate: (lessonIndex: number, field: keyof AppLesson, value: any) => void; onLessonDelete: (lessonIndex: number) => void; onSaveLessonAsTemplate: (lessonIndex: number) => void; onAddBlock: (lessonIndex: number, type: LessonType) => void; onBlockUpdate: (lessonIndex: number, blockIndex: number, field: string, value: any) => void; onBlockDelete: (lessonIndex: number, blockIndex: number) => void; onEditQuiz: (quiz: AppQuiz) => void; isSaving: boolean; onDelete: () => void; moduleIndex: number, provided: DraggableProvided }>(
-    ({ module, moduleIndex, onUpdate, onAddLesson, onLessonUpdate, onLessonDelete, onSaveLessonAsTemplate, onAddBlock, onBlockUpdate, onBlockDelete, onEditQuiz, isSaving, onDelete, provided }, ref) => {
-        return (
-            <div ref={ref} {...provided.draggableProps}>
-                <Accordion type="single" collapsible className="w-full bg-muted/30 rounded-lg border" defaultValue={`item-${module.id}`}>
-                    <AccordionItem value={`item-${module.id}`} className="border-0">
-                         <div className="flex items-center px-4 py-2" {...provided.dragHandleProps}>
-                             <AccordionTrigger className="flex-grow hover:no-underline p-0">
-                                <div className="flex items-center gap-2 w-full">
-                                    <GripVertical className="h-5 w-5 text-muted-foreground" />
-                                    <Input value={module.title} onChange={e => onUpdate('title', e.target.value)} className="text-base font-semibold" disabled={isSaving} />
-                                </div>
-                            </AccordionTrigger>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive ml-2 shrink-0" onClick={(e) => { e.stopPropagation(); onDelete(); }} disabled={isSaving}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                        <AccordionContent className="p-4 pt-0 border-t">
-                            <Droppable droppableId={module.id} type="LESSONS">
-                                {(provided) => (
-                                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-3">
-                                        {module.lessons.map((lesson, lessonIndex) => (
-                                            <Draggable key={lesson.id} draggableId={lesson.id} index={lessonIndex}>
-                                                {(provided) => (
-                                                    <LessonItem
-                                                        lesson={lesson}
-                                                        onDelete={() => onLessonDelete(lessonIndex)}
-                                                        onUpdate={(field, value) => onLessonUpdate(lessonIndex, field, value)}
-                                                        onSaveAsTemplate={() => onSaveLessonAsTemplate(lessonIndex)}
-                                                        onAddBlock={(type) => onAddBlock(lessonIndex, type)}
-                                                        onBlockUpdate={(blockIndex, field, value) => onBlockUpdate(lessonIndex, blockIndex, field, value)}
-                                                        onBlockDelete={(blockIndex) => onBlockDelete(lessonIndex, blockIndex)}
-                                                        onEditQuiz={onEditQuiz}
-                                                        isSaving={isSaving}
-                                                        ref={provided.innerRef}
-                                                        {...provided.draggableProps}
-                                                        {...provided.dragHandleProps}
-                                                    />
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
-                                    </div>
-                                )}
-                            </Droppable>
-                            <div className="mt-4 flex gap-2">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button size="sm" variant="secondary" disabled={isSaving}>
-                                            <PlusCircle className="mr-2 h-4 w-4" />Añadir Lección<ChevronDown className="ml-2 h-4 w-4"/>
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        <DropdownMenuItem onSelect={() => onAddLesson('blank')}><FilePlus2 className="mr-2 h-4 w-4"/>Lección en Blanco</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={() => onAddLesson('template')}><Sparkles className="mr-2 h-4 w-4"/>Usar Plantilla</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
+// Componente para carga de imágenes
+const ImageUploader: React.FC<{
+  imageUrl: string | null;
+  onImageChange: (file: File) => Promise<void>;
+  onImageRemove: () => void;
+  isUploading: boolean;
+  uploadProgress: number;
+  aspectRatio?: string;
+  className?: string;
+}> = ({ imageUrl, onImageChange, onImageRemove, isUploading, uploadProgress, aspectRatio = "aspect-[4/3]", className = "" }) => {
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+
+  const handleFileSelect = async (file: File | null) => {
+    if (!file) return;
+    const preview = URL.createObjectURL(file);
+    setLocalPreview(preview);
+    await onImageChange(file);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (localPreview) {
+        URL.revokeObjectURL(localPreview);
+      }
+    };
+  }, [localPreview]);
+
+  return (
+    <div className={`${aspectRatio} rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800 overflow-hidden group relative bg-gray-50 dark:bg-gray-800/50 ${className}`}>
+      {isUploading && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 backdrop-blur-sm">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-white mx-auto mb-2" />
+            <p className="text-xs text-white font-medium">{uploadProgress}%</p>
+          </div>
+        </div>
+      )}
+
+      {(localPreview || imageUrl) ? (
+        <>
+          <Image
+            src={localPreview || imageUrl!}
+            alt="Imagen"
+            fill
+            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            sizes="(max-width: 768px) 100vw, 25vw"
+          />
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+            <UploadArea
+              onFileSelect={handleFileSelect}
+              accept="image/*"
+              className="absolute inset-0 cursor-pointer"
+              inputId={`image-upload-${Date.now()}`}
+            />
+            <div className="flex gap-2 z-20">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-8 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  document.getElementById(`image-upload-${Date.now()}`)?.click();
+                }}
+              >
+                <Replace className="h-3.5 w-3.5 mr-1" />
+                Cambiar
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-8 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onImageRemove();
+                  setLocalPreview(null);
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Eliminar
+              </Button>
             </div>
-        )
-    }
-);
-ModuleItem.displayName = 'ModuleItem';
+          </div>
+        </>
+      ) : (
+        <UploadArea
+          onFileSelect={handleFileSelect}
+          accept="image/*"
+          className="h-full flex flex-col items-center justify-center p-4 text-center cursor-pointer"
+          inputId={`image-upload-${Date.now()}`}
+        >
+          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mb-3">
+            <ImagePlus className="h-5 w-5 text-primary" />
+          </div>
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Subir imagen</p>
+          <p className="text-[10px] text-gray-400 mt-1">Recomendado: 1600x1200px</p>
+        </UploadArea>
+      )}
+    </div>
+  );
+};
 
+// Componente para estadísticas del curso
+const CourseStats: React.FC<{ course: AppCourse }> = ({ course }) => {
+  const stats = useMemo(() => ({
+    totalModules: course?.modules?.length || 0,
+    totalLessons: course?.modules?.reduce((acc, mod) => acc + (mod.lessons?.length || 0), 0) || 0,
+    totalBlocks: course?.modules?.reduce((acc, mod) =>
+      acc + (mod.lessons?.reduce((lessonAcc, lesson) =>
+        lessonAcc + (lesson.contentBlocks?.length || 0), 0) || 0), 0) || 0,
+    hasCertificate: !!course?.certificateTemplateId,
+    isMandatory: course?.isMandatory || false,
+    hasPrerequisite: !!course?.prerequisiteId,
+  }), [course]);
 
-const LessonItem = React.forwardRef<HTMLDivElement, { lesson: AppLesson; onUpdate: (field: keyof AppLesson, value: any) => void; onSaveAsTemplate: () => void; onAddBlock: (type: LessonType) => void; onBlockUpdate: (blockIndex: number, field: string, value: any) => void; onBlockDelete: (blockIndex: number) => void; onEditQuiz: (quiz: AppQuiz) => void; isSaving: boolean; onDelete: () => void; }>(
-    ({ lesson, onUpdate, onSaveAsTemplate, onAddBlock, onBlockUpdate, onBlockDelete, onEditQuiz, isSaving, onDelete, ...rest }, ref) => {
-        return (
-            <div ref={ref} {...rest} className="bg-card p-3 rounded-md border">
-                <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1 cursor-grab touch-none"><GripVertical className="h-5 w-5 text-muted-foreground" /></div>
-                    <Input value={lesson.title} onChange={e => onUpdate('title', e.target.value)} placeholder="Título de la lección" disabled={isSaving} />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                           <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4"/></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                           <DropdownMenuItem onSelect={onSaveAsTemplate}><SaveIcon className="mr-2 h-4 w-4"/>Guardar como Plantilla</DropdownMenuItem>
-                           <DropdownMenuSeparator/>
-                           <DropdownMenuItem onSelect={onDelete} className="text-destructive focus:bg-destructive/10"><Trash2 className="mr-2 h-4 w-4"/>Eliminar Lección</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-                 <Droppable droppableId={lesson.id} type="BLOCKS">
-                    {(provided) => (
-                        <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                            {lesson.contentBlocks.map((block, blockIndex) => (
-                                <Draggable key={block.id} draggableId={block.id} index={blockIndex}>
-                                     {(provided) => (
-                                        <ContentBlockItem
-                                            block={block} 
-                                            onUpdate={(field, value) => onBlockUpdate(blockIndex, field, value)} 
-                                            onDelete={() => onBlockDelete(blockIndex)} 
-                                            onEditQuiz={() => onEditQuiz(block.quiz!)}
-                                            isSaving={isSaving}
-                                            dragHandleProps={provided.dragHandleProps}
-                                            ref={provided.innerRef}
-                                            {...provided.draggableProps}
-                                        />
-                                     )}
-                                </Draggable>
-                            ))}
-                            {provided.placeholder}
-                        </div>
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Badge variant="outline" className="bg-white dark:bg-gray-800 px-3 py-1 font-bold">
+        {stats.totalModules} Módulos
+      </Badge>
+      <Badge variant="outline" className="bg-white dark:bg-gray-800 px-3 py-1 text-muted-foreground font-medium">
+        {stats.totalLessons} Lecciones
+      </Badge>
+      <Badge variant="outline" className="bg-white dark:bg-gray-800 px-3 py-1 text-muted-foreground font-medium">
+        {stats.totalBlocks} Elementos
+      </Badge>
+      {stats.hasCertificate && (
+        <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+          <Award className="h-3 w-3 mr-1" />
+          Certificado
+        </Badge>
+      )}
+      {stats.isMandatory && (
+        <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+          <Shield className="h-3 w-3 mr-1" />
+          Obligatorio
+        </Badge>
+      )}
+    </div>
+  );
+};
+
+// Componente para la barra de acciones del curso
+const CourseActionBar: React.FC<{
+  course: AppCourse;
+  isDirty: boolean;
+  isSaving: boolean;
+  onSave: () => Promise<void>;
+  onPreview: () => void;
+  onDelete: () => void;
+  onExport: () => void;
+  isExporting: boolean;
+}> = ({ course, isDirty, isSaving, onSave, onPreview, onDelete, onExport, isExporting }) => {
+  return (
+    <div className="flex items-center justify-between bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b transition-all duration-300">
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 w-full">
+        <div className="flex items-center justify-between h-14">
+          <div className="flex items-center gap-4">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/manage-courses"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>Volver a la gestión de cursos</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <div className="group flex items-center gap-2">
+              <div className="flex flex-col">
+                <h1 className="text-sm font-bold truncate max-w-[200px] group-hover:max-w-md transition-all duration-500">
+                  {course.title}
+                </h1>
+              </div>
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2 text-[10px] text-muted-foreground bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                <Edit className="h-3 w-3" />
+                {course.id === 'new' ? 'Creando' : 'Editando'}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={onPreview}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Vista previa del curso</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={onExport}
+                    disabled={isExporting}
+                  >
+                    {isExporting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
                     )}
-                 </Droppable>
-                 <div className="mt-2 border-t pt-2">
-                     <BlockTypeSelector onSelect={onAddBlock} />
-                 </div>
-            </div>
-        );
-    }
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Exportar plan de estudios</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-9 w-9",
+                      isDirty && "text-primary bg-primary/5 animate-pulse"
+                    )}
+                    onClick={onSave}
+                    disabled={isSaving || !isDirty}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isSaving ? 'Guardando...' : 'Guardar cambios'}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-800 mx-1" />
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-destructive hover:bg-destructive/10"
+                    onClick={onDelete}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Eliminar curso</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente de carga optimizado
+const LoadingState: React.FC = () => (
+  <div className="flex flex-col items-center justify-center min-h-screen">
+    <div className="relative">
+      <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl"></div>
+      <Loader2 className="h-12 w-12 animate-spin text-primary relative" />
+    </div>
+    <p className="mt-4 text-lg font-medium text-muted-foreground animate-pulse">
+      Cargando editor de cursos...
+    </p>
+  </div>
 );
-LessonItem.displayName = 'LessonItem';
 
+// Componente de acceso denegado
+const AccessDenied: React.FC = () => (
+  <div className="flex flex-col items-center justify-center min-h-screen text-center p-8">
+    <div className="bg-destructive/10 p-6 rounded-full mb-6">
+      <ShieldAlert className="h-16 w-16 text-destructive" />
+    </div>
+    <h2 className="text-2xl font-bold mb-2">Acceso Denegado</h2>
+    <p className="text-muted-foreground mb-6 max-w-md">
+      No tienes los permisos necesarios para editar este curso.
+    </p>
+    <Link href="/manage-courses" className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">
+      <ArrowLeft className="mr-2 h-4 w-4" />
+      Volver a mis cursos
+    </Link>
+  </div>
+);
 
-const ContentBlockItem = React.forwardRef<HTMLDivElement, { block: ContentBlock; onUpdate: (field: string, value: any) => void; onEditQuiz: () => void; isSaving: boolean; onDelete: () => void; dragHandleProps: any; }>(
-    ({ block, onUpdate, onEditQuiz, isSaving, onDelete, dragHandleProps, ...rest }, ref) => {
-        const [isFileUploading, setIsFileUploading] = useState(false);
-        const [fileUploadProgress, setFileUploadProgress] = useState(0);
-        const [localPreview, setLocalPreview] = useState<string | null>(null);
-        const { toast } = useToast();
+// === COMPONENTES PRINCIPALES OPTIMIZADOS ===
 
-        useEffect(() => {
-            return () => { if (localPreview) URL.revokeObjectURL(localPreview); };
-        }, [localPreview]);
+const ContentBlockItem = React.memo(React.forwardRef<HTMLDivElement, {
+  block: ContentBlock;
+  blockIndex: number;
+  onUpdate: (field: string, value: any) => void;
+  onEditQuiz: () => void;
+  isSaving: boolean;
+  onDelete: () => void;
+  dragHandleProps: any;
+}>(
+  ({ block, blockIndex, onUpdate, onEditQuiz, isSaving, onDelete, dragHandleProps, ...rest }, ref) => {
+    const [isFileUploading, setIsFileUploading] = useState(false);
+    const [fileUploadProgress, setFileUploadProgress] = useState(0);
+    const [localPreview, setLocalPreview] = useState<string | null>(null);
+    const [selectedComponent, setSelectedComponent] = useState<'text' | 'accordion' | 'flipCards' | 'tabs'>('text');
+    const { toast } = useToast();
 
+    const getInteractiveData = useCallback((): InteractiveComponentData => {
+      const defaultData: InteractiveComponentData = { type: 'accordion', items: [], settings: {} };
+      if (!block.content) return defaultData;
+      try {
+        if (block.content.trim().startsWith('{')) {
+          return JSON.parse(block.content) as InteractiveComponentData;
+        }
+      } catch (e) {
+        // No es JSON
+      }
+      return defaultData;
+    }, [block.content]);
 
-        const handleFileSelect = async (file: File | null) => {
-            if (!file) return;
+    const interactiveData = getInteractiveData();
 
-            if (file.type.startsWith('image/')) setLocalPreview(URL.createObjectURL(file));
-            
-            setIsFileUploading(true);
-            setFileUploadProgress(0);
-            
-            try {
-                const result = await uploadWithProgress('/api/upload/lesson-file', file, setFileUploadProgress);
-                onUpdate('content', result.url);
-                toast({ title: 'Archivo Subido', description: `El archivo ${file.name} se ha subido correctamente.`});
-            } catch (err) {
-                toast({ title: 'Error de Subida', description: (err as Error).message, variant: 'destructive' });
-                if (localPreview) URL.revokeObjectURL(localPreview);
-                setLocalPreview(null);
-            } finally {
-                setIsFileUploading(false);
-            }
-        };
+    useEffect(() => {
+      if (block.content && block.content.trim().startsWith('{')) {
+        try {
+          const data = JSON.parse(block.content);
+          if (data.type && (data.type === 'accordion' || data.type === 'flipCards' || data.type === 'tabs')) {
+            setSelectedComponent(data.type);
+          }
+        } catch (e) { }
+      } else if (block.type === 'TEXT') {
+        setSelectedComponent('text');
+      }
+    }, [block.id]);
 
-        const renderBlockContent = () => {
-            if (block.type === 'TEXT') return <RichTextEditor value={block.content || ''} onChange={value => onUpdate('content', value)} placeholder="Escribe aquí el contenido o pega un enlace externo..." disabled={isSaving} />;
-            if (block.type === 'VIDEO') return <Input value={block.content} onChange={e => onUpdate('content', e.target.value)} placeholder="URL del video de YouTube" disabled={isSaving} />;
-            if (block.type === 'FILE') {
-                const displayUrl = localPreview || block.content;
-                const isImage = displayUrl?.match(/\.(jpeg|jpg|gif|png|webp)$/) != null || localPreview?.startsWith('blob:');
+    const handleFileSelect = useCallback(async (file: File | null) => {
+      if (!file) return;
 
-                if (displayUrl && !isFileUploading) {
-                    const fileName = block.content?.split('/').pop()?.split('-').slice(2).join('-') || 'Archivo';
-                    return (
-                        <div className="flex items-center gap-2 p-2 rounded-md border bg-background min-w-0">
-                            {isImage ? (<div className="w-10 h-10 relative rounded flex-shrink-0"><Image src={displayUrl} alt="Preview" fill className="object-cover" /></div>) : (<FileGenericIcon className="h-5 w-5 text-primary shrink-0" />)}
-                            <span className="text-sm font-medium text-foreground truncate flex-grow min-w-0" title={fileName}>{fileName}</span>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive rounded-full" onClick={() => { onUpdate('content', ''); setLocalPreview(null); }}><XCircle className="h-4 w-4"/></Button>
-                        </div>
-                    );
-                }
-                return (
-                    <div className="space-y-2">
-                        <UploadArea onFileSelect={handleFileSelect} disabled={isSaving || isFileUploading} />
-                        {isFileUploading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Progress value={fileUploadProgress} className="w-full h-1.5" /><span>{fileUploadProgress}%</span></div>}
-                    </div>
-                );
-            }
-            if (block.type === 'QUIZ') return (
-                 <div className="flex flex-col gap-2 w-full">
-                    <Input value={block.quiz?.title || ''} onChange={e => onUpdate('quiz', { ...block.quiz, title: e.target.value })} placeholder="Título del Quiz" disabled={isSaving} />
-                     <div className="p-4 border rounded-lg bg-background">
-                         <QuizGameView form={{...block.quiz, fields: block.quiz.questions}} isEditorPreview={true} />
-                     </div>
-                     <Button type="button" variant="outline" size="sm" className="self-start" onClick={onEditQuiz}>
-                        <Pencil className="mr-2 h-4 w-4" /> Editar Preguntas
+      if (file.type.startsWith('image/')) {
+        setLocalPreview(URL.createObjectURL(file));
+      }
+
+      setIsFileUploading(true);
+      setFileUploadProgress(0);
+
+      try {
+        const result = await uploadWithProgress('/api/upload/lesson-file', file, setFileUploadProgress);
+        onUpdate('content', result.url);
+        toast({ title: 'Archivo Subido', description: `El archivo ${file.name} se ha subido correctamente.` });
+      } catch (err) {
+        toast({ title: 'Error de Subida', description: (err as Error).message, variant: 'destructive' });
+        if (localPreview) URL.revokeObjectURL(localPreview);
+        setLocalPreview(null);
+      } finally {
+        setIsFileUploading(false);
+      }
+    }, [onUpdate, toast, localPreview]);
+
+    const handleInteractiveComponentChange = useCallback((data: InteractiveComponentData) => {
+      onUpdate('content', JSON.stringify(data));
+    }, [onUpdate]);
+
+    const handleComponentTypeChange = useCallback((type: 'accordion' | 'flipCards' | 'tabs') => {
+      const newData: InteractiveComponentData = {
+        type,
+        items: [],
+        settings: type === 'accordion' ? { allowMultipleOpen: false } :
+          type === 'flipCards' ? { flipDirection: 'horizontal' } :
+            { tabPosition: 'top' }
+      };
+      onUpdate('content', JSON.stringify(newData));
+      setSelectedComponent(type);
+    }, [onUpdate]);
+
+    const renderBlockContent = useMemo(() => {
+      if (block.type === 'TEXT') {
+        if (selectedComponent === 'text') {
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Contenido de Texto</Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <Layers className="h-4 w-4" />
+                      Componentes Interactivos
+                      <ChevronDown className="h-4 w-4" />
                     </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSelectedComponent('text')}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Texto Simple
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleComponentTypeChange('accordion')}>
+                      <ChevronDown className="h-4 w-4 mr-2" />
+                      Acordeón
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleComponentTypeChange('flipCards')}>
+                      <FlipVertical className="h-4 w-4 mr-2" />
+                      Tarjetas de Volteo
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleComponentTypeChange('tabs')}>
+                      <SquareStack className="h-4 w-4 mr-2" />
+                      Pestañas de Información
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <RichTextEditor
+                value={block.content || ''}
+                onChange={value => onUpdate('content', value)}
+                placeholder="Escribe aquí el contenido de la lección..."
+                className="min-h-[200px] border rounded-lg"
+                disabled={isSaving}
+              />
+              <p className="text-xs text-gray-500">Usa el editor para añadir formato, imágenes, enlaces, etc.</p>
+            </div>
+          );
+        } else {
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedComponent('text')}
+                    className="gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Volver a Texto
+                  </Button>
+                  <Badge variant="outline" className="capitalize">
+                    {selectedComponent === 'accordion' && 'Acordeón'}
+                    {selectedComponent === 'flipCards' && 'Tarjetas de Volteo'}
+                    {selectedComponent === 'tabs' && 'Pestañas de Información'}
+                  </Badge>
                 </div>
-            );
-            return null;
-        };
+              </div>
+              <p className="text-xs text-gray-500">
+                {selectedComponent === 'accordion' && 'Los estudiantes podrán expandir y contraer secciones.'}
+                {selectedComponent === 'flipCards' && 'Los estudiantes podrán voltear las tarjetas para ver más información.'}
+                {selectedComponent === 'tabs' && 'Los estudiantes podrán cambiar entre pestañas de información.'}
+              </p>
+            </div>
+          );
+        }
+      }
+
+      if (block.type === 'VIDEO') return (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">URL del Video</Label>
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <Video className="h-4 w-4" />
+            </div>
+            <Input
+              value={block.content || ''}
+              onChange={e => onUpdate('content', e.target.value)}
+              placeholder="URL del video (YouTube, Vimeo, etc.)"
+              className="pl-10 h-10"
+              disabled={isSaving}
+            />
+          </div>
+          <p className="text-xs text-gray-500">Pega la URL completa del video. Ej: https://www.youtube.com/watch?v=...</p>
+        </div>
+      );
+
+      if (block.type === 'FILE') {
+        const displayUrl = localPreview || block.content;
+        const isImage = displayUrl?.match(/\.(jpeg|jpg|gif|png|webp)$/) != null || localPreview?.startsWith('blob:');
+
+        if (displayUrl && !isFileUploading) {
+          const fileName = block.content?.split('/').pop()?.split('-').slice(2).join('-') || 'Archivo adjunto';
+          return (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Archivo Subido</Label>
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <div className="p-2 bg-amber-500/10 rounded-lg">
+                  {isImage ? (
+                    <div className="w-10 h-10 relative rounded overflow-hidden">
+                      <Image src={displayUrl} alt="Preview" fill className="object-cover" sizes="40px" />
+                    </div>
+                  ) : (
+                    <FileGenericIcon className="h-5 w-5 text-amber-500" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{fileName}</p>
+                  <p className="text-xs text-gray-500">Haz clic en los botones para previsualizar o eliminar</p>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => window.open(displayUrl, '_blank')}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    Ver
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-destructive hover:text-destructive"
+                    onClick={() => { onUpdate('content', ''); setLocalPreview(null); }}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    Eliminar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        }
 
         return (
-            <div ref={ref} {...rest} className="flex items-start gap-2 bg-muted/50 p-2 rounded">
-                <div {...dragHandleProps} className="p-1 cursor-grab touch-none mt-2">
-                    <GripVertical className="h-5 w-5 text-muted-foreground" />
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">Subir Archivo</Label>
+            <UploadArea
+              onFileSelect={handleFileSelect}
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
+              disabled={isSaving || isFileUploading}
+              className="py-6 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:border-primary transition-colors"
+            >
+              <div className="text-center">
+                <UploadCloud className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                <p className="font-medium mb-1">Arrastra y suelta tu archivo aquí</p>
+                <p className="text-sm text-gray-500">o haz clic para seleccionar</p>
+              </div>
+            </UploadArea>
+            {isFileUploading && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="font-medium">Subiendo...</span>
+                  <span>{fileUploadProgress}%</span>
                 </div>
-                <div className="flex-grow min-w-0">{renderBlockContent()}</div>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={onDelete} disabled={isSaving}><Trash2 className="h-4 w-4" /></Button>
-            </div>
+                <Progress value={fileUploadProgress} className="h-2" />
+              </div>
+            )}
+            <p className="text-xs text-gray-500">Formatos soportados: PDF, Word, Excel, PowerPoint, Imágenes</p>
+          </div>
         );
-    }
-);
+      }
+
+      if (block.type === 'QUIZ') return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">Configuración del Quiz</Label>
+              <p className="text-xs text-gray-500">Añade preguntas y configura las opciones del quiz</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onEditQuiz}
+              className="h-8"
+            >
+              Configurar Preguntas
+            </Button>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="quiz-title">Título del Quiz</Label>
+            <Input
+              id="quiz-title"
+              value={block.quiz?.title || ''}
+              onChange={e => onUpdate('quiz', { ...block.quiz, title: e.target.value })}
+              placeholder="Título del Quiz"
+              className="h-9"
+              disabled={isSaving}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="quiz-description">Descripción</Label>
+            <Textarea
+              id="quiz-description"
+              value={block.quiz?.description || ''}
+              onChange={e => onUpdate('quiz', { ...block.quiz, description: e.target.value })}
+              placeholder="Descripción del quiz..."
+              rows={2}
+              className="text-sm"
+              disabled={isSaving}
+            />
+          </div>
+          <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800/50 rounded">
+            <span className="text-sm">Preguntas configuradas:</span>
+            <Badge variant="outline">
+              {block.quiz?.questions?.length || 0} preguntas
+            </Badge>
+          </div>
+        </div>
+      );
+
+      return null;
+    }, [block, selectedComponent, isSaving, onUpdate, onEditQuiz, localPreview, isFileUploading, fileUploadProgress, handleComponentTypeChange, handleFileSelect]);
+
+    const getBlockIcon = useCallback(() => {
+      switch (block.type) {
+        case 'TEXT':
+          if (selectedComponent === 'accordion') return <ChevronDown className="h-4 w-4" />;
+          if (selectedComponent === 'flipCards') return <FlipVertical className="h-4 w-4" />;
+          if (selectedComponent === 'tabs') return <SquareStack className="h-4 w-4" />;
+          return <FileText className="h-4 w-4" />;
+        case 'VIDEO': return <Video className="h-4 w-4" />;
+        case 'FILE': return <FileGenericIcon className="h-4 w-4" />;
+        case 'QUIZ': return <Pencil className="h-4 w-4" />;
+        default: return <FileText className="h-4 w-4" />;
+      }
+    }, [block.type, selectedComponent]);
+
+    const getBlockColor = useCallback(() => {
+      switch (block.type) {
+        case 'TEXT':
+          if (selectedComponent === 'accordion') return 'bg-green-500/10 text-green-600';
+          if (selectedComponent === 'flipCards') return 'bg-purple-500/10 text-purple-600';
+          if (selectedComponent === 'tabs') return 'bg-amber-500/10 text-amber-600';
+          return 'bg-blue-500/10 text-blue-600';
+        case 'VIDEO': return 'bg-red-500/10 text-red-600';
+        case 'FILE': return 'bg-amber-500/10 text-amber-600';
+        case 'QUIZ': return 'bg-purple-500/10 text-purple-600';
+        default: return 'bg-primary/10 text-primary';
+      }
+    }, [block.type, selectedComponent]);
+
+    return (
+      <motion.div
+        ref={ref}
+        {...rest}
+        className="flex items-start gap-3 bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all"
+      >
+        <div className="flex items-start gap-2">
+          <div {...dragHandleProps} className="p-1.5 cursor-grab active:cursor-grabbing touch-none hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+            <GripVertical className="h-3.5 w-3.5 text-gray-400" />
+          </div>
+          <div className={`p-2.5 rounded-lg ${getBlockColor()}`}>
+            {getBlockIcon()}
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs px-2 py-0.5 capitalize font-medium">
+                {block.type.toLowerCase()}
+              </Badge>
+              <span className="text-xs text-gray-500">Elemento #{blockIndex + 1}</span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 hover:text-destructive"
+              onClick={onDelete}
+              disabled={isSaving}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          {renderBlockContent}
+        </div>
+      </motion.div>
+    );
+  }
+));
 ContentBlockItem.displayName = 'ContentBlockItem';
 
-// === COMPONENTE PRINCIPAL DE LA PÁGINA (CourseEditor) ===
+// === COMPONENTE PRINCIPAL OPTIMIZADO ===
 export function CourseEditor({ courseId }: { courseId: string }) {
-    const router = useRouter();
-    const { toast } = useToast();
-    const { user, settings, isLoading: isAuthLoading } = useAuth();
-    const { setPageTitle, setHeaderActions, setShowBackButton } = useTitle();
+  const router = useRouter();
+  const { toast } = useToast();
+  const { user, settings, isLoading: isAuthLoading } = useAuth();
+  const { setPageTitle } = useTitle();
 
-    const [course, setCourse] = useState<AppCourse | null>(null);
-    const [allCoursesForPrereq, setAllCoursesForPrereq] = useState<AppCourse[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isDirty, setIsDirty] = useState(false);
-    
-    const [itemToDeleteDetails, setItemToDeleteDetails] = useState<any>(null);
-    
-    const [isUploadingImage, setIsUploadingImage] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [localCoverImagePreview, setLocalCoverImagePreview] = useState<string | null>(null);
+  const [course, setCourse] = useState<AppCourse | null>(null);
+  const [allCoursesForPrereq, setAllCoursesForPrereq] = useState<AppCourse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState('basics');
 
-    const [templates, setTemplates] = useState<ApiTemplate[]>([]);
-    const [certificateTemplates, setCertificateTemplates] = useState<PrismaCertificateTemplate[]>([]);
-    const [showTemplateModal, setShowTemplateModal] = useState(false);
-    const [activeModuleIndexForTemplate, setActiveModuleIndexForTemplate] = useState<number | null>(null);
+  const [itemToDeleteDetails, setItemToDeleteDetails] = useState<any>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-    const [lessonToSaveAsTemplate, setLessonToSaveAsTemplate] = useState<AppLesson | null>(null);
-    
-    const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
-    
-    const [quizToEdit, setQuizToEdit] = useState<{ quiz: AppQuiz; onSave: (updatedQuiz: AppQuiz) => void } | null>(null);
+  const [templates, setTemplates] = useState<ApiTemplate[]>([]);
+  const [certificateTemplates, setCertificateTemplates] = useState<PrismaCertificateTemplate[]>([]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [activeModuleIndexForTemplate, setActiveModuleIndexForTemplate] = useState<number | null>(null);
+  const [lessonToSaveAsTemplate, setLessonToSaveAsTemplate] = useState<AppLesson | null>(null);
+  const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
+  const [quizToEdit, setQuizToEdit] = useState<{ quiz: AppQuiz; onSave: (updatedQuiz: AppQuiz) => void } | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [isExporting, setIsExporting] = useState(false);
 
+  // --- Data Fetching optimizado ---
+  useEffect(() => {
+    const fetchAllData = async () => {
+      if (!user) return;
 
-    // --- Data Fetching ---
-    useEffect(() => {
-        const fetchAllCoursesForPrereq = async () => {
-            try {
-                const res = await fetch('/api/courses?simple=true');
-                if (!res.ok) return;
-                const data = await res.json();
-                setAllCoursesForPrereq((data.courses || []).filter((c: AppCourse) => c.id !== courseId));
-            } catch (e) { console.error(e); }
-        };
+      try {
+        setIsLoading(true);
 
-        const fetchCourseData = async () => {
-            if (courseId === 'new') {
-                setCourse({
-                    id: generateUniqueId('course'),
-                    title: 'Nuevo Curso sin Título',
-                    description: 'Añade una descripción aquí.',
-                    instructor: user as any,
-                    instructorId: user?.id,
-                    status: 'DRAFT',
-                    category: '',
-                    modules: [],
-                    modulesCount: 0,
-                    prerequisiteId: null,
-                    isMandatory: false,
-                    certificateTemplateId: null,
-                });
-                setIsLoading(false);
-                setPageTitle('Crear Nuevo Curso');
-                return;
-            }
-
-            try {
-                setIsLoading(true);
-                const response = await fetch(`/api/courses/${courseId}`);
-                if (!response.ok) throw new Error("Curso no encontrado");
-                const courseData: AppCourse = await response.json();
-                setCourse(courseData);
-            } catch (err) {
-                 toast({ title: "Error", description: "No se pudo cargar el curso para editar.", variant: "destructive" });
-                 router.push('/manage-courses');
-            } finally {
-                 setIsLoading(false);
-            }
-        };
-        
-        const fetchTemplates = async () => {
-            try {
-                const res = await fetch('/api/templates');
-                if (res.ok) setTemplates(await res.json());
-            } catch (e) {
-                console.error("Failed to fetch templates", e);
-            }
-        };
-
-        const fetchCertificateTemplates = async () => {
-            try {
-                const res = await fetch('/api/certificates/templates');
-                if (res.ok) setCertificateTemplates(await res.json());
-            } catch (e) {
-                console.error("Failed to fetch certificate templates", e);
-            }
+        if (courseId === 'new') {
+          setCourse({
+            id: generateUniqueId('course'),
+            title: 'Nuevo Curso sin Título',
+            description: 'Añade una descripción aquí.',
+            instructor: user as any,
+            instructorId: user?.id,
+            status: 'DRAFT',
+            category: '',
+            modules: [],
+            modulesCount: 0,
+            prerequisiteId: null,
+            isMandatory: false,
+            certificateTemplateId: null,
+            imageUrl: null,
+          });
+          setPageTitle('Crear Nuevo Curso');
+          return;
         }
 
-        if (user) {
-            fetchCourseData();
-            fetchTemplates();
-            fetchCertificateTemplates();
-            fetchAllCoursesForPrereq();
+        const [courseRes, templatesRes, certificatesRes, coursesRes] = await Promise.all([
+          fetch(`/api/courses/${courseId}`),
+          fetch('/api/templates'),
+          fetch('/api/certificates/templates'),
+          fetch('/api/courses?simple=true')
+        ]);
+
+        if (!courseRes.ok) throw new Error("Curso no encontrado");
+
+        const courseData: AppCourse = await courseRes.json();
+        setCourse(courseData);
+
+        if (templatesRes.ok) setTemplates(await templatesRes.json());
+        if (certificatesRes.ok) setCertificateTemplates(await certificatesRes.json());
+        if (coursesRes.ok) {
+          const data = await coursesRes.json();
+          setAllCoursesForPrereq((data.courses || []).filter((c: AppCourse) => c.id !== courseId));
         }
-    }, [courseId, user, router, toast, setPageTitle]);
-    
-     const handleSaveCourse = useCallback(async () => {
-        if (!course) return;
-        setIsSaving(true);
-        
-        const payload = { ...course };
-        (payload.modules || []).forEach((mod, mIdx) => {
-            mod.order = mIdx;
-            (mod.lessons || []).forEach((les, lIdx) => {
-                les.order = lIdx;
-                (les.contentBlocks || []).forEach((block, bIdx) => {
-                    block.order = bIdx;
-                });
-            });
+
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "No se pudo cargar el curso para editar.",
+          variant: "destructive"
         });
-        
-        try {
-            const endpoint = courseId === 'new' ? '/api/courses' : `/api/courses/${courseId}`;
-            const method = courseId === 'new' ? 'POST' : 'PUT';
-
-            const response = await fetch(endpoint, {
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            if (!response.ok) throw new Error((await response.json()).message || 'Error al guardar el curso.');
-
-            const savedCourse = await response.json();
-            
-            toast({ title: "Curso Guardado", description: "La información del curso se ha guardado correctamente." });
-            
-            setCourse(savedCourse); 
-            setIsDirty(false); 
-            
-            if (courseId === 'new') {
-                router.replace(`/manage-courses/${savedCourse.id}/edit`, { scroll: false });
-            }
-            
-            return savedCourse;
-
-        } catch (error: any) {
-            console.error('Error al guardar el curso:', error);
-            toast({ title: "Error al Guardar", description: error.message || "No se pudo guardar.", variant: "destructive" });
-            return null;
-        } finally {
-            setIsSaving(false);
-        }
-    }, [course, courseId, router, toast]);
-
-    const handleMandatorySwitchChange = async (checked: boolean) => {
-        if (!course) return;
-        
-        updateCourseField('isMandatory', checked);
-        
-        if (checked) {
-            const savedCourse = await handleSaveCourse();
-            if (savedCourse) {
-                 setTimeout(() => setIsAssignmentModalOpen(true), 100);
-            }
-        }
+        router.push('/manage-courses');
+      } finally {
+        setIsLoading(false);
+      }
     };
-    
-    useEffect(() => {
-        const EditorActions = () => (
-             <div className="flex items-center gap-2">
-                <Button asChild variant="ghost" className="text-primary-foreground hover:bg-black/20" size="sm">
-                    <Link href={`/courses/${courseId}`} target="_blank">
-                        <Eye className="mr-2 h-4 w-4" /> Vista Previa
-                    </Link>
-                </Button>
-                <Button onClick={handleSaveCourse} disabled={isSaving || !isDirty} size="sm" className="bg-white/90 text-primary hover:bg-white">
-                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    {isSaving ? 'Guardando...' : 'Guardar'}
-                </Button>
-            </div>
-        );
 
-        if (course) {
-            setPageTitle(`Editando: ${course.title}`);
-            setHeaderActions(<EditorActions />);
-            setShowBackButton(true);
-        }
-        return () => {
-            setPageTitle('');
-            setHeaderActions(null);
-            setShowBackButton(false);
-        }
-    }, [course, isSaving, isDirty, courseId, setPageTitle, setHeaderActions, setShowBackButton, handleSaveCourse]);
+    fetchAllData();
+  }, [courseId, user, router, toast, setPageTitle]);
 
+  const handleSaveCourse = useCallback(async () => {
+    if (!course) return;
+    setIsSaving(true);
 
-    const handleStateUpdate = useCallback((updater: (prev: AppCourse) => AppCourse) => {
-        setCourse(prev => {
-            if (!prev) return null;
-            const newCourse = JSON.parse(JSON.stringify(prev));
-            return updater(newCourse);
+    const payload = { ...course };
+    (payload.modules || []).forEach((mod, mIdx) => {
+      mod.order = mIdx;
+      (mod.lessons || []).forEach((les, lIdx) => {
+        les.order = lIdx;
+        (les.contentBlocks || []).forEach((block, bIdx) => {
+          block.order = bIdx;
         });
-        setIsDirty(true);
-    }, []);
+      });
+    });
 
-    const updateCourseField = (field: keyof AppCourse, value: any) => {
-        handleStateUpdate(prev => {
-            prev[field] = value;
-            return prev;
-        });
-    };
-    
-    const updateModuleField = (moduleIndex: number, field: keyof AppModule, value: any) => {
-        handleStateUpdate(prev => {
-            prev.modules[moduleIndex][field] = value;
-            return prev;
-        });
-    };
-    
-    const updateLessonField = (moduleIndex: number, lessonIndex: number, field: keyof AppLesson, value: any) => {
-        handleStateUpdate(prev => {
-            prev.modules[moduleIndex].lessons[lessonIndex][field] = value;
-            return prev;
-        });
-    };
-    
-    const updateBlockField = (moduleIndex: number, lessonIndex: number, blockIndex: number, field: string, value: any) => {
-        handleStateUpdate(prev => {
-            prev.modules[moduleIndex].lessons[lessonIndex].contentBlocks[blockIndex][field] = value;
-            return prev;
-        });
-    };
+    try {
+      const endpoint = courseId === 'new' ? '/api/courses' : `/api/courses/${courseId}`;
+      const method = courseId === 'new' ? 'POST' : 'PUT';
 
-    const handleEditQuiz = (quizToEdit: AppQuiz) => {
-        const handleSave = (updatedQuiz: AppQuiz) => {
-            handleStateUpdate(prev => {
-                for (const mod of (prev.modules || [])) {
-                    for (const les of (mod.lessons || [])) {
-                        const blockIndex = (les.contentBlocks || []).findIndex(b => b.quiz?.id === quizToEdit.id);
-                        if (blockIndex !== -1) {
-                            les.contentBlocks[blockIndex].quiz = updatedQuiz;
-                            break;
-                        }
-                    }
-                }
-                return prev;
-            });
-            setQuizToEdit(null);
-        };
-        
-        setQuizToEdit({ quiz: quizToEdit, onSave: handleSave });
-    };
+      const response = await fetch(endpoint, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    const handleAddModule = () => {
-        handleStateUpdate(prev => {
-            const newModule: AppModule = {
-                id: generateUniqueId('module'),
-                title: 'Nuevo Módulo',
-                order: (prev.modules || []).length,
-                lessons: [],
-            };
-            if (!prev.modules) prev.modules = [];
-            prev.modules.push(newModule);
-            return prev;
-        });
-    };
-    
-    const handleAddLessonAction = (moduleIndex: number, type: 'blank' | 'template') => {
-        if (type === 'blank') {
-            handleAddLesson(moduleIndex);
-        } else {
-            setActiveModuleIndexForTemplate(moduleIndex);
-            setShowTemplateModal(true);
-        }
-    };
-    
-    const handleAddLesson = useCallback((moduleIndex: number, template?: ApiTemplate) => {
-        handleStateUpdate(prev => {
-            let newBlocks: ContentBlock[] = [];
-            if (template) {
-                newBlocks = template.templateBlocks.map(tb => ({
-                    id: generateUniqueId('block'),
-                    type: tb.type as LessonType,
-                    content: '',
-                    order: tb.order,
-                    quiz: tb.type === 'QUIZ' ? {
-                        id: generateUniqueId('quiz'),
-                        title: 'Nuevo Quiz desde Plantilla',
-                        description: '',
-                        questions: [],
-                        maxAttempts: null,
-                    } : undefined
-                }));
-            }
+      if (!response.ok) throw new Error((await response.json()).message || 'Error al guardar el curso.');
 
-            const newLesson: AppLesson = {
-                id: generateUniqueId('lesson'),
-                title: template ? `Lección de "${template.name}"` : 'Nueva Lección',
-                order: (prev.modules?.[moduleIndex]?.lessons || []).length,
-                contentBlocks: newBlocks,
-            };
-            
-            if (!prev.modules[moduleIndex].lessons) prev.modules[moduleIndex].lessons = [];
-            prev.modules[moduleIndex].lessons.push(newLesson);
-            return prev;
-        });
-        setShowTemplateModal(false);
-        setActiveModuleIndexForTemplate(null);
-    }, [handleStateUpdate]);
-    
-     const handleAddBlock = useCallback((moduleIndex: number, lessonIndex: number, type: LessonType) => {
-        handleStateUpdate(prev => {
-            const newBlock: ContentBlock = {
-                id: generateUniqueId('block'),
-                type: type,
-                content: '',
-                order: prev.modules[moduleIndex].lessons[lessonIndex].contentBlocks.length,
-                quiz: type === 'QUIZ' ? { 
-                    id: generateUniqueId('quiz'), 
-                    title: 'Nuevo Quiz', 
-                    description: '', 
-                    questions: [],
-                    maxAttempts: null,
-                    remedialContent: null,
-                } : undefined
-            };
-            if (!prev.modules[moduleIndex].lessons[lessonIndex].contentBlocks) {
-                prev.modules[moduleIndex].lessons[lessonIndex].contentBlocks = [];
-            }
-            prev.modules[moduleIndex].lessons[lessonIndex].contentBlocks.push(newBlock);
-            return prev;
-        });
-    }, [handleStateUpdate]);
+      const savedCourse = await response.json();
 
-    const handleRemoveModule = (moduleIndex: number) => {
-         setItemToDeleteDetails({
-            name: course?.modules?.[moduleIndex]?.title,
-            onDelete: () => handleStateUpdate(prev => {
-                prev.modules.splice(moduleIndex, 1);
-                return prev;
-            })
-        })
-    };
+      toast({
+        title: "✅ Curso Guardado",
+        description: "La información del curso se ha guardado correctamente.",
+        duration: 3000
+      });
 
-    const handleRemoveLesson = (moduleIndex: number, lessonIndex: number) => {
-         setItemToDeleteDetails({
-            name: course?.modules?.[moduleIndex]?.lessons?.[lessonIndex]?.title,
-            onDelete: () => {
-                handleStateUpdate(prev => {
-                    prev.modules[moduleIndex].lessons.splice(lessonIndex, 1);
-                    return prev;
-                });
-            }
-        })
-    };
-    
-    const handleRemoveBlock = (moduleIndex: number, lessonIndex: number, blockIndex: number) => {
-        handleStateUpdate(prev => {
-            prev.modules[moduleIndex].lessons[lessonIndex].contentBlocks.splice(blockIndex, 1);
-            return prev;
-        });
-    };
+      setCourse(savedCourse);
+      setIsDirty(false);
 
-    const onDragEnd = (result: DropResult) => {
-        const { source, destination, type } = result;
-        if (!destination || !course) return;
+      if (courseId === 'new') {
+        router.replace(`/manage-courses/${savedCourse.id}/edit`, { scroll: false });
+      }
 
-        handleStateUpdate(prev => {
-            if (type === 'MODULES') {
-                const [reorderedItem] = prev.modules.splice(source.index, 1);
-                prev.modules.splice(destination.index, 0, reorderedItem);
-            } else if (type === 'LESSONS') {
-                 const sourceModule = prev.modules.find(m => m.id === source.droppableId);
-                 const destModule = prev.modules.find(m => m.id === destination.droppableId);
-                 if (!sourceModule || !destModule) return prev;
+      return savedCourse;
 
-                 const [movedItem] = sourceModule.lessons.splice(source.index, 1);
-                 destModule.lessons.splice(destination.index, 0, movedItem);
-            } else if (type === 'BLOCKS') {
-                 const sourceLesson = prev.modules.flatMap(m => m.lessons).find(l => l.id === source.droppableId);
-                 const destLesson = prev.modules.flatMap(m => m.lessons).find(l => l.id === destination.droppableId);
-                 if (!sourceLesson || !destLesson) return prev;
-
-                 const [movedItem] = sourceLesson.contentBlocks.splice(source.index, 1);
-                 destLesson.contentBlocks.splice(destination.index, 0, movedItem);
-            }
-            return prev;
-        });
-    };
-
-    const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const previewUrl = URL.createObjectURL(file);
-            setLocalCoverImagePreview(previewUrl);
-
-            setIsUploadingImage(true);
-            setUploadProgress(0);
-
-            try {
-                const result = await uploadWithProgress('/api/upload/course-image', file, setUploadProgress);
-                updateCourseField('imageUrl', result.url);
-                toast({ title: 'Imagen Subida', description: 'La imagen de portada se ha actualizado.'});
-            } catch (err) {
-                 toast({ title: 'Error de Subida', description: (err as Error).message, variant: 'destructive' });
-                 setLocalCoverImagePreview(null);
-            } finally {
-                setIsUploadingImage(false);
-            }
-        }
-    };
-    
-    useEffect(() => {
-        return () => {
-            if (localCoverImagePreview) {
-                URL.revokeObjectURL(localCoverImagePreview);
-            }
-        };
-    }, [localCoverImagePreview]);
-    
-    const handleSaveTemplate = async (templateName: string, templateDescription: string) => {
-        if (!lessonToSaveAsTemplate) return;
-        try {
-            const res = await fetch('/api/templates', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: templateName, description: templateDescription, lessonId: lessonToSaveAsTemplate.id })
-            });
-            if (!res.ok) throw new Error('No se pudo guardar la plantilla');
-            toast({ title: 'Plantilla Guardada', description: `La plantilla "${templateName}" se ha guardado correctamente.`});
-            const newTemplate = await res.json();
-            setTemplates(prev => [...prev, newTemplate]);
-            setLessonToSaveAsTemplate(null);
-        } catch (err) {
-            toast({ title: "Error", description: (err as Error).message, variant: "destructive"});
-        }
-    };
-
-
-    if (isLoading || isAuthLoading || !course) {
-        return <div className="flex items-center justify-center min-h-[calc(100vh-80px)]"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
+    } catch (error: any) {
+      console.error('Error al guardar el curso:', error);
+      toast({
+        title: "❌ Error al Guardar",
+        description: error.message || "No se pudo guardar. Intenta nuevamente.",
+        variant: "destructive",
+        duration: 5000
+      });
+      return null;
+    } finally {
+      setIsSaving(false);
     }
+  }, [course, courseId, router, toast]);
 
-    if (courseId !== 'new' && !isAuthLoading && user?.role !== 'ADMINISTRATOR' && user?.id !== course.instructorId) {
-        return <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)] text-center p-4"><ShieldAlert className="h-20 w-20 text-red-500 mb-4" /><h2 className="text-2xl font-bold mb-2">Acceso Denegado</h2><p className="text-muted-foreground mb-4">No tienes permiso para editar este curso.</p><Link href="/manage-courses" className={buttonVariants({ variant: "outline" })}>Volver</Link></div>;
+  const handleStateUpdate = useCallback((updater: (prev: AppCourse) => AppCourse) => {
+    setCourse(prev => {
+      if (!prev) return null;
+      const newCourse = JSON.parse(JSON.stringify(prev));
+      return updater(newCourse);
+    });
+    setIsDirty(true);
+  }, []);
+
+  const updateCourseField = useCallback((field: keyof AppCourse, value: any) => {
+    handleStateUpdate(prev => {
+      prev[field] = value;
+      return prev;
+    });
+  }, [handleStateUpdate]);
+
+  const handleImageUpload = useCallback(async (file: File) => {
+    setIsUploadingImage(true);
+    setUploadProgress(0);
+
+    try {
+      const result = await uploadWithProgress('/api/upload/course-image', file, setUploadProgress);
+      updateCourseField('imageUrl', result.url);
+      toast({
+        title: '✅ Imagen Subida',
+        description: 'La imagen de portada se ha actualizado correctamente.',
+        duration: 3000
+      });
+    } catch (err) {
+      toast({
+        title: '❌ Error de Subida',
+        description: (err as Error).message,
+        variant: "destructive",
+        duration: 5000
+      });
+    } finally {
+      setIsUploadingImage(false);
     }
+  }, [updateCourseField, toast]);
 
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-5 gap-6 items-start">
-            {/* Columna Izquierda */}
-            <div className="lg:col-span-1 xl:col-span-1 space-y-6 lg:sticky lg:top-24">
-                <Card>
-                    <CardHeader><CardTitle className="text-lg">Información Básica</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-1.5"><Label htmlFor="title">Título del Curso</Label><Input id="title" value={course.title} onChange={e => updateCourseField('title', e.target.value)} placeholder="Título atractivo" disabled={isSaving} /></div>
-                        <div className="space-y-1.5"><Label htmlFor="description">Descripción <span className="text-muted-foreground">(Opcional)</span></Label><Textarea id="description" value={course.description} onChange={e => updateCourseField('description', e.target.value)} placeholder="Describe el contenido y objetivos." rows={4} disabled={isSaving} /></div>
-                        <div className="space-y-1.5"><Label htmlFor="category">Categoría</Label><Select value={course.category || ''} onValueChange={v => updateCourseField('category', v)} disabled={isSaving}><SelectTrigger id="category"><SelectValue placeholder="Selecciona" /></SelectTrigger><SelectContent>{(settings?.resourceCategories || []).sort().map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent></Select></div>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader><CardTitle className="text-lg">Imagen de Portada</CardTitle></CardHeader>
-                    <CardContent>
-                        <div className="w-full relative aspect-video rounded-md border bg-muted/20 flex items-center justify-center">
-                            {isUploadingImage && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 z-20"><Loader2 className="h-8 w-8 animate-spin text-primary"/><Progress value={uploadProgress} className="w-3/4 h-2"/></div>}
-                            {(localCoverImagePreview || course.imageUrl) && !isUploadingImage ? (
-                                <>
-                                    <Image src={localCoverImagePreview || course.imageUrl!} alt="Imagen del Curso" fill className="object-cover p-1" />
-                                    <div className="absolute top-2 right-2 z-10 flex gap-1">
-                                        <Button type="button" variant="secondary" size="icon" className="h-8 w-8" onClick={() => document.getElementById('cover-image-upload')?.click()} disabled={isSaving || isUploadingImage}><Replace className="h-4 w-4"/></Button>
-                                        <Button type="button" variant="destructive" size="icon" className="h-8 w-8" onClick={() => { updateCourseField('imageUrl', null); setLocalCoverImagePreview(null); }} disabled={isSaving || isUploadingImage}><XCircle className="h-4 w-4"/></Button>
-                                    </div>
-                                </>
-                            ) : (
-                                <UploadArea onFileSelect={(file) => { if(file) handleFileChange({ target: { files: [file] } } as any) }} inputId="cover-image-upload" disabled={isSaving || isUploadingImage}>
-                                    <div className="text-center text-muted-foreground"><ImagePlus className="mx-auto h-8 w-8 mb-2" /><p className="text-sm font-semibold">Subir imagen</p><p className="text-xs">Recomendado: 16:9</p></div>
-                                </UploadArea>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-            
-            {/* Columna Central */}
-            <div className="lg:col-span-2 xl:col-span-3 space-y-6">
-                <Card>
-                    <CardHeader><CardTitle className="text-lg">Contenido y Estructura</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        <DragDropContext onDragEnd={onDragEnd}>
-                            <Droppable droppableId="course-modules" type="MODULES">
-                                {(provided) => (
-                                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4">
-                                        {course.modules.map((moduleItem, moduleIndex) => (
-                                            <Draggable key={moduleItem.id} draggableId={moduleItem.id} index={moduleIndex}>
-                                                {(provided) => (
-                                                    <ModuleItem
-                                                        module={moduleItem} moduleIndex={moduleIndex}
-                                                        onDelete={() => handleRemoveModule(moduleIndex)}
-                                                        onUpdate={(field, value) => updateModuleField(moduleIndex, field, value)}
-                                                        onAddLesson={(type) => handleAddLessonAction(moduleIndex, type)}
-                                                        onLessonUpdate={(lessonIndex, field, value) => updateLessonField(moduleIndex, lessonIndex, field, value)}
-                                                        onLessonDelete={(lessonIndex) => handleRemoveLesson(moduleIndex, lessonIndex)}
-                                                        onSaveLessonAsTemplate={(lessonIndex) => setLessonToSaveAsTemplate(course.modules[moduleIndex].lessons[lessonIndex])}
-                                                        onAddBlock={(lessonIndex, type) => handleAddBlock(moduleIndex, lessonIndex, type)}
-                                                        onBlockUpdate={(lessonIndex, blockIndex, field, value) => updateBlockField(moduleIndex, lessonIndex, blockIndex, field, value)}
-                                                        onBlockDelete={(lessonIndex, blockIndex) => handleRemoveBlock(moduleIndex, lessonIndex, blockIndex)}
-                                                        onEditQuiz={handleEditQuiz}
-                                                        isSaving={isSaving} provided={provided} ref={provided.innerRef}
-                                                    />
-                                                )}
-                                            </Draggable>
-                                        ))}
-                                        {provided.placeholder}
-                                    </div>
-                                )}
-                            </Droppable>
-                        </DragDropContext>
-                        {(course.modules || []).length === 0 && <p className="text-center text-muted-foreground py-8">No hay módulos.</p>}
-                         <Button type="button" onClick={handleAddModule} disabled={isSaving} className="mt-4"><PlusCircle className="mr-2 h-4 w-4" /> Añadir Módulo</Button>
-                    </CardContent>
-                </Card>
-            </div>
-            
-            {/* Columna Derecha */}
-            <div className="lg:col-span-1 xl:col-span-1 space-y-6 lg:sticky lg:top-24">
-                <Card>
-                    <CardHeader><CardTitle className="text-lg">Configuración de Publicación</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-1.5"><Label htmlFor="status">Estado</Label><Select value={course.status} onValueChange={v => updateCourseField('status', v as CourseStatus)} disabled={isSaving}><SelectTrigger id="status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DRAFT">Borrador</SelectItem><SelectItem value="PUBLISHED">Publicado</SelectItem><SelectItem value="ARCHIVED">Archivado</SelectItem></SelectContent></Select></div>
-                         <div className="space-y-1.5">
-                            <Label>Vigencia del Curso <span className="text-muted-foreground">(Opcional)</span></Label>
-                            <DateRangePicker
-                              date={{ from: course.startDate ? new Date(course.startDate) : undefined, to: course.endDate ? new Date(course.endDate) : undefined }}
-                              onDateChange={(range) => {
-                                  updateCourseField('startDate', range?.from?.toISOString());
-                                  updateCourseField('endDate', range?.to?.toISOString());
-                              }}
-                            />
-                        </div>
-                        <Separator/>
-                        <div className="space-y-1.5"><Label htmlFor="prerequisite">Prerrequisito <span className="text-muted-foreground">(Opcional)</span></Label><Select value={course.prerequisiteId || 'none'} onValueChange={v => updateCourseField('prerequisiteId', v === 'none' ? null : v)} disabled={isSaving}><SelectTrigger id="prerequisite"><SelectValue placeholder="Ninguno"/></SelectTrigger><SelectContent><SelectItem value="none">Ninguno</SelectItem><Separator/>{allCoursesForPrereq.map(c => (<SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>))}</SelectContent></Select></div>
-                        <div className="space-y-1.5"><Label htmlFor="certificateTemplate">Plantilla de Certificado <span className="text-muted-foreground">(Opcional)</span></Label><Select value={course.certificateTemplateId || 'none'} onValueChange={v => updateCourseField('certificateTemplateId', v === 'none' ? null : v)} disabled={isSaving}><SelectTrigger id="certificateTemplate"><SelectValue placeholder="Sin certificado"/></SelectTrigger><SelectContent><SelectItem value="none">Sin certificado</SelectItem><Separator/>{certificateTemplates.map(t => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))}</SelectContent></Select></div>
-                        <Separator/>
-                        <div className="flex items-center justify-between space-x-2 p-2.5 border rounded-lg">
-                           <Label htmlFor="isMandatory" className="flex flex-col space-y-1"><span>Curso Obligatorio</span><span className="font-normal leading-snug text-muted-foreground text-xs">Permite asignar este curso a usuarios.</span></Label>
-                           <Switch id="isMandatory" checked={course.isMandatory} onCheckedChange={handleMandatorySwitchChange} disabled={isSaving}/>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-            
-            {/* Modales */}
-            <AlertDialog open={!!itemToDeleteDetails} onOpenChange={(isOpen) => !isOpen && setItemToDeleteDetails(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader><AlertDialogTitle>Confirmar eliminación</AlertDialogTitle><AlertDialogDescription>¿Estás seguro? Esta acción eliminará "{itemToDeleteDetails?.name}" y su contenido.</AlertDialogDescription></AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { itemToDeleteDetails.onDelete(); setItemToDeleteDetails(null) }} className={buttonVariants({ variant: "destructive" })}>Sí, eliminar</AlertDialogAction></AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-            <TemplateSelectorModal 
-                isOpen={showTemplateModal}
-                templates={templates}
-                onClose={() => { setShowTemplateModal(false); setActiveModuleIndexForTemplate(null); }}
-                onSelect={(template) => {
-                    if (activeModuleIndexForTemplate !== null) {
-                        handleAddLesson(activeModuleIndexForTemplate, template);
-                    }
-                }}
-            />
-             {lessonToSaveAsTemplate && (
-                <SaveTemplateModal 
-                    isOpen={!!lessonToSaveAsTemplate}
-                    onClose={() => setLessonToSaveAsTemplate(null)}
-                    onSave={handleSaveTemplate}
-                />
-            )}
-             {isAssignmentModalOpen && (
-                <CourseAssignmentModal
-                    isOpen={isAssignmentModalOpen}
-                    onClose={() => setIsAssignmentModalOpen(false)}
-                    courseId={course.id}
-                    courseTitle={course.title}
-                />
-            )}
-            {quizToEdit && (
-                <QuizEditorModal 
-                    isOpen={!!quizToEdit} 
-                    onClose={() => setQuizToEdit(null)} 
-                    quiz={quizToEdit.quiz}
-                    onSave={quizToEdit.onSave}
-                />
-            )}
-        </div>
-    );
-}
+  const handleDeleteCourse = useCallback(async () => {
+    if (!course) return;
 
-const BlockTypeSelector = ({ onSelect }) => (
-    <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm"><PlusCircle className="mr-2 h-4 w-4"/>Añadir Contenido</Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-             <DropdownMenuItem onSelect={() => onSelect('TEXT')}><FileText className="mr-2 h-4 w-4"/>Texto/Enlace</DropdownMenuItem>
-             <DropdownMenuItem onSelect={() => onSelect('VIDEO')}><Video className="mr-2 h-4 w-4"/>Video (YouTube)</DropdownMenuItem>
-             <DropdownMenuItem onSelect={() => onSelect('FILE')}><FileGenericIcon className="mr-2 h-4 w-4"/>Archivo (PDF, Img)</DropdownMenuItem>
-             <DropdownMenuItem onSelect={() => onSelect('QUIZ')}><Pencil className="mr-2 h-4 w-4"/>Quiz Interactivo</DropdownMenuItem>
-        </DropdownMenuContent>
-    </DropdownMenu>
-);
+    try {
+      const response = await fetch(`/api/courses/${courseId}`, {
+        method: 'DELETE',
+      });
 
-// Modal para seleccionar una plantilla
-const TemplateSelectorModal = ({ isOpen, onClose, templates, onSelect }) => {
-    return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>Usar Plantilla de Lección</DialogTitle>
-                    <DialogDescription>Elige una plantilla para crear rápidamente una nueva lección con una estructura predefinida.</DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="max-h-[60vh] mt-4">
-                    <div className="p-1 space-y-2">
-                        {templates.map(template => (
-                            <button key={template.id} onClick={() => onSelect(template)} className="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors">
-                                <p className="font-semibold">{template.name}</p>
-                                <p className="text-sm text-muted-foreground">{template.description}</p>
-                                <div className="text-xs text-muted-foreground mt-2 flex items-center gap-2">
-                                   {template.templateBlocks.map((b,i) => <Badge key={i} variant="secondary">{b.type}</Badge>)}
+      if (!response.ok) throw new Error('Error al eliminar el curso');
+
+      toast({
+        title: "✅ Curso Eliminado",
+        description: "El curso se ha eliminado correctamente.",
+        duration: 3000
+      });
+
+      router.push('/manage-courses');
+    } catch (error: any) {
+      toast({
+        title: "❌ Error al Eliminar",
+        description: error.message || "No se pudo eliminar el curso.",
+        variant: "destructive",
+        duration: 5000
+      });
+    }
+  }, [course, courseId, router, toast]);
+
+  const handlePreviewCourse = useCallback(() => {
+    if (courseId === 'new') {
+      toast({
+        title: "⚠️ Guarda primero el curso",
+        description: "Debes guardar el curso antes de previsualizarlo.",
+        duration: 3000
+      });
+      return;
+    }
+    window.open(`/courses/${courseId}?preview=true`, '_blank');
+  }, [courseId, toast]);
+
+  const handleExportPlan = useCallback(async () => {
+    if (!course) return;
+
+    setIsExporting(true);
+
+    try {
+      const exportData = {
+        courseTitle: course.title,
+        courseDescription: course.description,
+        modules: course.modules.map(module => ({
+          title: module.title,
+          lessons: module.lessons.map(lesson => ({
+            title: lesson.title,
+            contentBlocks: lesson.contentBlocks.map(block => ({
+              type: block.type,
+              content: block.content || '',
+              quiz: block.quiz ? {
+                title: block.quiz.title,
+                description: block.quiz.description,
+                questions: block.quiz.questions?.length || 0
+              } : undefined
+            }))
+          }))
+        }))
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plan-estudio-${course.title.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "✅ Plan Exportado",
+        description: "El plan de estudios se ha exportado correctamente.",
+        duration: 3000
+      });
+    } catch (error) {
+      toast({
+        title: "❌ Error al Exportar",
+        description: "No se pudo exportar el plan de estudios.",
+        variant: "destructive",
+        duration: 5000
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [course, toast]);
+
+  if (isLoading || isAuthLoading || !course) {
+    return <LoadingState />;
+  }
+
+  if (courseId !== 'new' && !isAuthLoading && user?.role !== 'ADMINISTRATOR' && user?.id !== course.instructorId) {
+    return <AccessDenied />;
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-950">
+      <CourseActionBar
+        course={course}
+        isDirty={isDirty}
+        isSaving={isSaving}
+        onSave={handleSaveCourse}
+        onPreview={handlePreviewCourse}
+        onDelete={() => setShowDeleteDialog(true)}
+        onExport={handleExportPlan}
+        isExporting={isExporting}
+      />
+
+      {/* Contenido Principal */}
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="inline-flex w-auto p-1 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur rounded-xl h-11">
+            <TabsTrigger value="basics" className="text-xs font-semibold px-6 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
+              <Layout className="h-3.5 w-3.5 mr-2" />
+              Básico
+            </TabsTrigger>
+            <TabsTrigger value="curriculum" className="text-xs font-semibold px-6 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
+              <BookOpen className="h-3.5 w-3.5 mr-2" />
+              Plan de Estudios
+            </TabsTrigger>
+            <TabsTrigger value="advanced" className="text-xs font-semibold px-6 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
+              <Settings2 className="h-3.5 w-3.5 mr-2" />
+              Ajustes
+            </TabsTrigger>
+            <TabsTrigger value="distribution" className="text-xs font-semibold px-6 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 data-[state=active]:shadow-sm">
+              <GlobeIcon className="h-3.5 w-3.5 mr-2" />
+              Publicación
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Pestaña: Información Básica */}
+          <TabsContent value="basics" className="space-y-6">
+            <div className="grid lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-3 space-y-6">
+                <Card className="border-none shadow-sm bg-white dark:bg-gray-900">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-lg font-bold">Detalles del Curso</CardTitle>
+                    <CardDescription>
+                      Define la identidad y propósito de tu programa educativo
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="title" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Título del Curso</Label>
+                      <Input
+                        id="title"
+                        value={course.title}
+                        onChange={e => updateCourseField('title', e.target.value)}
+                        placeholder="Ej: Master en Desarrollo Web Moderno"
+                        className="text-lg font-semibold h-12 bg-gray-50/50 border-gray-200 focus:bg-white transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="description" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Descripción Detallada</Label>
+                      <RichTextEditor
+                        value={course.description || ''}
+                        onChange={v => updateCourseField('description', v)}
+                        placeholder="Describe qué aprenderán tus estudiantes..."
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-1 space-y-6">
+                <Card className="border-none shadow-sm bg-white dark:bg-gray-900">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-sm font-bold">Imagen de Portada</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ImageUploader
+                      imageUrl={course.imageUrl}
+                      onImageChange={handleImageUpload}
+                      onImageRemove={() => updateCourseField('imageUrl', null)}
+                      isUploading={isUploadingImage}
+                      uploadProgress={uploadProgress}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Pestaña: Plan de Estudios - Simplificada */}
+          <TabsContent value="curriculum" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-bold tracking-tight">Estructura del Plan</CardTitle>
+                    <CardDescription>Gestiona los módulos y lecciones de tu curso</CardDescription>
+                  </div>
+                  <CourseStats course={course} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {course.modules.length === 0 ? (
+                    <div className="text-center py-12 border-2 border-dashed rounded-lg">
+                      <FolderOpen className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">Comienza a construir tu curso</h3>
+                      <p className="text-gray-500 mb-4">Añade tu primer módulo para empezar</p>
+                      <Button onClick={() => { }}>
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Crear Primer Módulo
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {course.modules.map((module, index) => (
+                        <Card key={module.id}>
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Badge>Módulo {index + 1}</Badge>
+                                <h3 className="font-bold">{module.title}</h3>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="outline" size="sm">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {module.lessons.map((lesson, idx) => (
+                                <div key={lesson.id} className="flex items-center justify-between p-2 border rounded">
+                                  <div className="flex items-center gap-3">
+                                    <BookOpenText className="h-4 w-4 text-blue-500" />
+                                    <span className="font-medium">Lección {idx + 1}: {lesson.title}</span>
+                                  </div>
+                                  <Badge variant="outline">
+                                    {lesson.contentBlocks.length} elementos
+                                  </Badge>
                                 </div>
-                            </button>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Pestaña: Configuración */}
+          <TabsContent value="advanced" className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5 text-primary" />
+                    Certificado
+                  </CardTitle>
+                  <CardDescription>
+                    Configura el certificado del curso
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Plantilla de Certificado</Label>
+                    <Select
+                      value={course.certificateTemplateId || 'none'}
+                      onValueChange={v => updateCourseField('certificateTemplateId', v === 'none' ? null : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin certificado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin certificado</SelectItem>
+                        {certificateTemplates.map(template => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
                         ))}
-                    </div>
-                </ScrollArea>
-            </DialogContent>
-        </Dialog>
-    );
-};
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
 
-// Modal para guardar una lección como plantilla
-const SaveTemplateModal = ({ isOpen, onClose, onSave }) => {
-    const [name, setName] = useState('');
-    const [description, setDescription] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary" />
+                    Prerrequisitos
+                  </CardTitle>
+                  <CardDescription>
+                    Establece cursos previos requeridos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Curso Prerrequisito</Label>
+                    <Select
+                      value={course.prerequisiteId || 'none'}
+                      onValueChange={v => updateCourseField('prerequisiteId', v === 'none' ? null : v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin prerrequisito" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin prerrequisito</SelectItem>
+                        {allCoursesForPrereq.map(course => (
+                          <SelectItem key={course.id} value={course.id}>
+                            {course.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
-    const handleFormSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSaving(true);
-        await onSave(name, description);
-        setIsSaving(false);
-    };
+          {/* Pestaña: Publicación */}
+          <TabsContent value="distribution" className="space-y-6">
+            <div className="grid lg:grid-cols-3 gap-6">
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-primary" />
+                    Disponibilidad
+                  </CardTitle>
+                  <CardDescription>
+                    Define cuándo estará disponible el curso
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <DateRangePicker
+                    date={{
+                      from: course.startDate ? new Date(course.startDate) : undefined,
+                      to: course.endDate ? new Date(course.endDate) : undefined
+                    }}
+                    onDateChange={(range) => {
+                      updateCourseField('startDate', range?.from?.toISOString());
+                      updateCourseField('endDate', range?.to?.toISOString());
+                    }}
+                  />
+                </CardContent>
+              </Card>
 
-    return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent>
-                <form onSubmit={handleFormSubmit}>
-                    <DialogHeader>
-                        <DialogTitle>Guardar Lección como Plantilla</DialogTitle>
-                        <DialogDescription>Dale un nombre y una descripción a tu nueva plantilla para reutilizarla más tarde.</DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="template-name">Nombre de la Plantilla</Label>
-                            <Input id="template-name" value={name} onChange={e => setName(e.target.value)} required disabled={isSaving}/>
-                        </div>
-                         <div className="space-y-2">
-                            <Label htmlFor="template-description">Descripción</Label>
-                            <Textarea id="template-description" value={description} onChange={e => setDescription(e.target.value)} disabled={isSaving}/>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>Cancelar</Button>
-                        <Button type="submit" disabled={isSaving || !name.trim()}>
-                            {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <SaveIcon className="mr-2 h-4 w-4"/>}
-                            Guardar Plantilla
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    )
-};
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Estado</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Select
+                      value={course.status}
+                      onValueChange={v => updateCourseField('status', v as CourseStatus)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DRAFT">Borrador</SelectItem>
+                        <SelectItem value="PUBLISHED">Publicado</SelectItem>
+                        <SelectItem value="ARCHIVED">Archivado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Categoría</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Select
+                      value={course.category || ''}
+                      onValueChange={v => updateCourseField('category', v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona categoría" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(settings?.resourceCategories || []).map(category => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Barra de Cambios Sin Guardar */}
+      {isDirty && (
+        <motion.div
+          initial={{ y: 100 }}
+          animate={{ y: 0 }}
+          className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 z-50"
+        >
+          <Card className="bg-white dark:bg-gray-900 border shadow-xl">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  <div>
+                    <p className="font-medium">Cambios sin guardar</p>
+                    <p className="text-sm text-muted-foreground">
+                      Guarda tus cambios antes de salir
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={handleSaveCourse}
+                  disabled={isSaving}
+                  size="sm"
+                >
+                  {isSaving ? 'Guardando...' : 'Guardar'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Diálogo de Eliminación */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar curso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará el curso "{course?.title}" y todos sus contenidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCourse}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de Eliminación de Elementos */}
+      <AlertDialog open={!!itemToDeleteDetails} onOpenChange={(open) => !open && setItemToDeleteDetails(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar elemento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminará "{itemToDeleteDetails?.name}" permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (itemToDeleteDetails?.onDelete) {
+                  itemToDeleteDetails.onDelete();
+                  setItemToDeleteDetails(null);
+                  toast({
+                    title: "Elemento eliminado",
+                    description: "Se ha eliminado correctamente.",
+                  });
+                }
+              }}
+              className="bg-destructive text-destructive-foreground"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

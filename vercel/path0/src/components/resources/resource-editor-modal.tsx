@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
@@ -16,32 +16,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, FileUp, Link as LinkIcon, FilePenLine, ArrowLeft, ArrowRight, UploadCloud, Info, Globe, Users, Briefcase, FileText as FileGenericIcon, Edit, BrainCircuit, PlusCircle, Trash2 } from 'lucide-react';
+import { Loader2, Save, FileUp, Link as LinkIcon, FilePenLine, ArrowLeft, ArrowRight, UploadCloud, FileText as FileGenericIcon, Edit, BrainCircuit, PlusCircle, Trash2, Calendar as CalendarIcon, FileText } from 'lucide-react';
 import type { AppResourceType, User as AppUser, Process, ResourceSharingMode, Quiz as AppQuiz } from '@/types';
 import { UploadArea } from '@/components/ui/upload-area';
 import { uploadWithProgress } from '@/lib/upload-with-progress';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Identicon } from '@/components/ui/identicon';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { FileIcon } from '@/components/ui/file-icon';
-import { formatFileSize } from '@/lib/utils';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { formatFileSize, cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { DateRange } from 'react-day-picker';
 import { FolderContentView } from '@/components/resources/folder-content-view';
 import { QuizEditorModal } from '@/components/quizz-it/quiz-editor-modal';
+import { ResourcePermissions } from './shared/resource-permissions';
 
 interface ResourceEditorModalProps {
     isOpen: boolean;
@@ -58,14 +50,13 @@ interface FlatProcess {
 }
 
 const STEPS = [
-    { id: 'info', name: 'Información' },
-    { id: 'content', name: 'Contenido' },
-    { id: 'config', name: 'Acceso' },
+    { id: 'info', name: 'Información Básica' },
+    { id: 'content', name: 'Contenido y Visibilidad' },
 ];
 
 const ProgressBar = ({ currentStep }: { currentStep: number }) => {
     return (
-        <div className="flex w-full px-6">
+        <div className="flex w-full px-12 pb-4">
             {STEPS.map((step, index) => {
                 const stepIndex = index + 1;
                 const isCompleted = currentStep > stepIndex;
@@ -73,17 +64,27 @@ const ProgressBar = ({ currentStep }: { currentStep: number }) => {
 
                 return (
                     <React.Fragment key={step.id}>
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-center relative z-10 group">
                             <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 border-2 ${isActive ? 'bg-primary border-primary text-primary-foreground' : isCompleted ? 'bg-primary/80 border-primary/80 text-primary-foreground' : 'bg-muted border-border'
-                                    }`}
+                                className={cn(
+                                    "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 border-2 shadow-sm",
+                                    isActive ? "bg-primary border-primary text-primary-foreground scale-110 shadow-primary/25" : isCompleted ? "bg-primary/90 border-primary/90 text-primary-foreground" : "bg-card border-border text-muted-foreground"
+                                )}
                             >
                                 {isCompleted ? '✓' : stepIndex}
                             </div>
-                            <p className={`text-xs mt-1 ${isActive || isCompleted ? "font-semibold text-primary" : "text-muted-foreground"}`}>{step.name}</p>
+                            <p className={cn("text-xs mt-2 font-medium transition-colors duration-300 absolute -bottom-6 w-32 text-center", isActive ? "text-primary font-bold" : "text-muted-foreground")}>{step.name}</p>
                         </div>
                         {stepIndex < STEPS.length && (
-                            <div className="flex-1 h-px bg-border my-4" />
+                            <div className="flex-1 h-0.5 relative mx-2 top-[-10px]">
+                                <div className="absolute inset-0 bg-border" />
+                                <motion.div
+                                    className="absolute inset-0 bg-primary"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: isCompleted ? "100%" : "0%" }}
+                                    transition={{ duration: 0.5 }}
+                                />
+                            </div>
                         )}
                     </React.Fragment>
                 );
@@ -96,48 +97,33 @@ const ProgressBar = ({ currentStep }: { currentStep: number }) => {
 export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSave }: ResourceEditorModalProps) {
     const { toast } = useToast();
     const { user, settings } = useAuth();
+    const isEditing = !!resource;
+    const isEditingFolder = isEditing && resource?.type === 'FOLDER';
 
     // Step management for CREATION
     const [creationStep, setCreationStep] = useState(1);
+    const [activeEditTab, setActiveEditTab] = useState('info');
 
-    // Common form state
+    // Form State
     const [title, setTitle] = useState('');
-    const [titleError, setTitleError] = useState<string | null>(null);
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState('');
     const [expiresAt, setExpiresAt] = useState<Date | undefined>(undefined);
     const [resourceType, setResourceType] = useState<AppResourceType['type']>('DOCUMENT');
 
+    // Content state
     const [externalLink, setExternalLink] = useState('');
     const [editableContent, setEditableContent] = useState('');
     const [observations, setObservations] = useState('');
     const [tags, setTags] = useState<string[]>([]);
 
+    // Upload state
     const [upload, setUpload] = useState<any>(null);
     const [isUploading, setIsUploading] = useState(false);
 
+    // Quiz state
     const [quiz, setQuiz] = useState<AppQuiz | null>(null);
     const [isQuizEditorOpen, setIsQuizEditorOpen] = useState(false);
-
-    // Title validation function
-    const validateTitle = (value: string): string | null => {
-        const trimmed = value.trim();
-
-        if (!trimmed) {
-            return "El título no puede estar vacío";
-        }
-
-        if (trimmed.length < 2) {
-            return "El título debe tener al menos 2 caracteres";
-        }
-
-        // Check if only special characters
-        if (!/[a-zA-Z0-9]/.test(trimmed)) {
-            return "El título debe contener al menos una letra o número";
-        }
-
-        return null; // Valid
-    };
 
     // Permissions state
     const [sharingMode, setSharingMode] = useState<ResourceSharingMode>('PUBLIC');
@@ -153,13 +139,6 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
 
     const [isSaving, setIsSaving] = useState(false);
 
-    const isEditing = !!resource;
-    const isEditingFolder = isEditing && resource?.type === 'FOLDER';
-
-    // Tab management for EDITING
-    const [activeEditTab, setActiveEditTab] = useState('info');
-
-
     const resetForm = useCallback(() => {
         setCreationStep(1);
         setTitle(''); setDescription('');
@@ -170,7 +149,7 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
         setTags([]);
         setSharedWithUserIds([]); setSharedWithProcessIds([]); setCollaboratorIds([]);
         setQuiz(null);
-    }, [settings?.resourceCategories]);
+    }, [settings]);
 
     const flattenProcesses = useCallback((processList: any[], level = 0): FlatProcess[] => {
         let list: FlatProcess[] = [];
@@ -182,7 +161,6 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
         });
         return list;
     }, []);
-
     const flattenedProcesses = useMemo(() => flattenProcesses(allProcesses), [allProcesses, flattenProcesses]);
 
     useEffect(() => {
@@ -204,7 +182,7 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
                 if (resource.type === 'EXTERNAL_LINK') setExternalLink(resource.url || '');
                 if (resource.type === 'DOCUMENTO_EDITABLE') setEditableContent(resource.content || '');
                 if ((resource.type === 'DOCUMENT' || resource.type === 'VIDEO') && resource.url) {
-                    setUpload({ url: resource.url, file: { name: resource.title, type: resource.filetype, size: resource.size } });
+                    setUpload({ url: resource.url, file: { name: resource.title, type: resource.filetype, size: resource.size }, status: 'completed' });
                 } else {
                     setUpload(null);
                 }
@@ -252,7 +230,7 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
                 setUpload((prev: any) => ({ ...prev, progress: p }));
             });
             setUpload((prev: any) => ({ ...prev, url: result.url, status: 'completed' }));
-            setTitle(prevTitle => prevTitle || file.name);
+            if (!title) setTitle(file.name.split('.').slice(0, -1).join('.'));
         } catch (err) {
             setUpload((prev: any) => ({ ...prev, status: 'error', error: (err as Error).message }));
             toast({ title: 'Error de Subida', description: (err as Error).message, variant: 'destructive' });
@@ -264,15 +242,8 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validate title
-        const error = validateTitle(title);
-        if (error) {
-            setTitleError(error);
-            toast({
-                title: 'Validación fallida',
-                description: error,
-                variant: 'destructive'
-            });
+        if (!title.trim()) {
+            toast({ title: 'Validación fallida', description: "El título es obligatorio.", variant: 'destructive' });
             return;
         }
 
@@ -294,9 +265,7 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
                 content: resourceType === 'DOCUMENTO_EDITABLE' ? editableContent : null,
                 sharingMode, sharedWithUserIds, sharedWithProcessIds, collaboratorIds,
                 parentId, expiresAt: expiresAt?.toISOString() || null,
-
-                observations, tags,
-                quiz,
+                observations, tags, quiz,
             };
 
             const endpoint = isEditing ? `/api/resources/${resource!.id}` : '/api/resources';
@@ -316,8 +285,8 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
         }
     };
 
-    const isStep1Valid = !!title.trim();
-    const isStep2Valid = isStep1Valid && (
+    const isStep1Valid = !!title.trim() && !!category;
+    const isStep2Valid = (
         (resourceType === 'DOCUMENT' && upload?.status === 'completed') ||
         (resourceType === 'EXTERNAL_LINK' && externalLink) ||
         (resourceType === 'DOCUMENTO_EDITABLE' && editableContent) ||
@@ -326,7 +295,6 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
 
     const InfoStep = () => {
         const [tagInput, setTagInput] = useState('');
-
         const handleAddTag = () => {
             if (tagInput.trim() && !tags.includes(tagInput.trim())) {
                 setTags([...tags, tagInput.trim()]);
@@ -335,63 +303,81 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
         };
 
         return (
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Datos Básicos</CardTitle>
-                        <CardDescription>Establece el nombre y una breve explicación del recurso.</CardDescription>
+            <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                <Card className="border-border/50 shadow-sm">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-primary" /> Datos Básicos
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="title">Título del Recurso</Label>
-                            <Input
-                                id="title"
-                                value={title}
-                                onChange={(e) => {
-                                    setTitle(e.target.value);
-                                    if (titleError) setTitleError(null);
-                                }}
-                                className={titleError ? "border-destructive" : ""}
-                                required
-                            />
-                            {titleError && <p className="text-xs text-destructive">{titleError}</p>}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="title">Título del Recurso</Label>
+                                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="h-10" placeholder="Ej: Manual de Procedimientos" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="category">Categoría</Label>
+                                <Select value={category} onValueChange={setCategory}>
+                                    <SelectTrigger id="category" className="h-10"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                    <SelectContent>{(settings?.resourceCategories || []).map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent>
+                                </Select>
+                            </div>
                         </div>
+
                         <div className="space-y-2">
-                            <Label htmlFor="description">Descripción</Label>
-                            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="¿De qué trata este recurso?" />
+                            <Label htmlFor="description">Descripción (Opcional)</Label>
+                            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Descripción breve..." className="min-h-[80px] resize-none" />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Etiquetas</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    placeholder="Nueva etiqueta..."
+                                    value={tagInput}
+                                    onChange={e => setTagInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                                    className="h-9"
+                                />
+                                <Button type="button" variant="secondary" onClick={handleAddTag} size="sm" className="shrink-0">Añadir</Button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 pt-2">
+                                {tags.map(tag => (
+                                    <span key={tag} className="bg-muted text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
+                                        {tag} <button type="button" onClick={() => setTags(tags.filter(t => t !== tag))} className="hover:text-destructive transition-colors ml-1">×</button>
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base text-primary flex items-center gap-2">Organización</CardTitle>
+                <Card className="border-border/50 shadow-sm bg-muted/5">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <CalendarIcon className="h-4 w-4 text-muted-foreground" /> Ciclo de Vida
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="category">Categoría</Label>
-                            <Select value={category} onValueChange={setCategory}>
-                                <SelectTrigger id="category"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                <SelectContent>{(settings?.resourceCategories || []).map(cat => (<SelectItem key={cat} value={cat}>{cat}</SelectItem>))}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Etiquetas</Label>
-                            <div className="flex gap-2 mb-2 flex-wrap">
-                                {tags.map(tag => (
-                                    <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-md text-xs flex items-center gap-1 font-medium ring-1 ring-primary/20">
-                                        {tag} <button type="button" onClick={() => setTags(tags.filter(t => t !== tag))} className="hover:text-destructive ml-1">×</button>
-                                    </span>
-                                ))}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Vencimiento (Opcional)</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" className="w-full justify-start text-left font-normal h-10 border-dashed">
+                                            {expiresAt ? format(expiresAt, "PPP", { locale: es }) : <span className="text-muted-foreground">Sin fecha de expiración</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar mode="single" selected={expiresAt} onSelect={setExpiresAt} initialFocus locale={es} />
+                                        {expiresAt && <div className="p-2 border-t text-center"><Button variant="ghost" size="sm" onClick={() => setExpiresAt(undefined)} className="h-8 text-xs text-destructive">Limpiar</Button></div>}
+                                    </PopoverContent>
+                                </Popover>
                             </div>
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="Añadir etiqueta..."
-                                    value={tagInput}
-                                    onChange={e => setTagInput(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-                                />
-                                <Button type="button" variant="secondary" onClick={handleAddTag} size="sm">Añadir</Button>
+                            <div className="space-y-2">
+                                <Label htmlFor="observations">Notas Internas</Label>
+                                <Input id="observations" value={observations} onChange={(e) => setObservations(e.target.value)} placeholder="Solo administradores..." className="h-10" />
                             </div>
                         </div>
                     </CardContent>
@@ -401,267 +387,215 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
     };
 
     const ContentStep = () => (
-        <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Tipo de Contenido</CardTitle>
-                    <CardDescription>Selecciona cómo se visualizará o entregará este recurso.</CardDescription>
+        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <Card className="border-border/50 shadow-sm">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">Tipo de Recurso</CardTitle>
+                    <CardDescription>Elige cómo entregar este contenido.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <RadioGroup value={resourceType} onValueChange={(v) => setResourceType(v as any)} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="flex-1">
-                            <RadioGroupItem value="DOCUMENT" id="type-doc" className="sr-only" />
-                            <Label htmlFor="type-doc" className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${resourceType === 'DOCUMENT' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-muted hover:border-primary/50'}`}>
-                                <FileUp className={`mb-2 h-6 w-6 ${resourceType === 'DOCUMENT' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                <span className="font-semibold text-sm">Archivo</span>
-                            </Label>
-                        </div>
-                        <div className="flex-1">
-                            <RadioGroupItem value="EXTERNAL_LINK" id="type-link" className="sr-only" />
-                            <Label htmlFor="type-link" className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${resourceType === 'EXTERNAL_LINK' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-muted hover:border-primary/50'}`}>
-                                <LinkIcon className={`mb-2 h-6 w-6 ${resourceType === 'EXTERNAL_LINK' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                <span className="font-semibold text-sm">Enlace Web</span>
-                            </Label>
-                        </div>
-                        <div className="flex-1">
-                            <RadioGroupItem value="DOCUMENTO_EDITABLE" id="type-editable" className="sr-only" />
-                            <Label htmlFor="type-editable" className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${resourceType === 'DOCUMENTO_EDITABLE' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-muted hover:border-primary/50'}`}>
-                                <FilePenLine className={`mb-2 h-6 w-6 ${resourceType === 'DOCUMENTO_EDITABLE' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                <span className="font-semibold text-sm">Documento</span>
-                            </Label>
-                        </div>
-                    </RadioGroup>
+                <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <SelectionCard
+                            id="type-doc"
+                            value="DOCUMENT"
+                            current={resourceType}
+                            onChange={setResourceType}
+                            icon={FileUp}
+                            title="Archivo"
+                            description="Sube PDF, PPT, Word, etc."
+                        />
+                        <SelectionCard
+                            id="type-link"
+                            value="EXTERNAL_LINK"
+                            current={resourceType}
+                            onChange={setResourceType}
+                            icon={LinkIcon}
+                            title="Enlace Externo"
+                            description="Website o recurso online"
+                        />
+                        <SelectionCard
+                            id="type-editable"
+                            value="DOCUMENTO_EDITABLE"
+                            current={resourceType}
+                            onChange={setResourceType}
+                            icon={FilePenLine}
+                            title="Documento"
+                            description="Crear contenido enriquecido"
+                        />
+                    </div>
 
-                    <div className="mt-4 pt-4 border-t">
-                        <Label className="mb-2 block">Material del Recurso</Label>
+                    <div className="p-4 bg-muted/30 rounded-xl border border-dashed">
                         {resourceType === 'DOCUMENT' && (
                             upload ? (
-                                <div className="p-3 border rounded-xl bg-muted/30 relative overflow-hidden">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-primary/10 rounded-lg">
-                                            <FileGenericIcon className="h-5 w-5 text-primary shrink-0" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-medium truncate">{upload.file.name}</p>
-                                            <p className="text-xs text-muted-foreground">{formatFileSize(upload.file.size)}</p>
-                                        </div>
-                                        {upload.status === 'completed' && <Button variant="ghost" size="icon" onClick={() => setUpload(null)}><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+                                <div className="flex items-center gap-4 p-3 bg-background border rounded-lg shadow-sm">
+                                    <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+                                        <FileGenericIcon className="h-6 w-6" />
                                     </div>
-                                    {upload.status === 'uploading' && <Progress value={upload.progress} className="h-1.5 mt-2" />}
-                                    {upload.status === 'error' && <p className="text-xs text-destructive mt-1 font-medium">{upload.error}</p>}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium truncate text-sm">{upload.file.name}</p>
+                                        <p className="text-xs text-muted-foreground">{formatFileSize(upload.file.size)}</p>
+                                        {upload.status === 'uploading' && <Progress value={upload.progress} className="h-1 mt-1.5" />}
+                                        {upload.status === 'error' && <p className="text-xs text-destructive mt-1">{upload.error}</p>}
+                                    </div>
+                                    {upload.status === 'completed' && (
+                                        <Button variant="ghost" size="icon" onClick={() => setUpload(null)} className="hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                    )}
                                 </div>
                             ) : (
-                                <UploadArea onFileSelect={(files) => files && handleFileSelect(files[0])} disabled={isUploading} />
+                                <UploadArea onFileSelect={(files) => files && handleFileSelect(files[0])} disabled={isUploading} className="min-h-[150px]" />
                             )
                         )}
-                        {resourceType === 'EXTERNAL_LINK' && <Input type="url" value={externalLink} onChange={e => setExternalLink(e.target.value)} placeholder="https://ejemplo.com/recurso" className="h-12" />}
-                        {resourceType === 'DOCUMENTO_EDITABLE' && <RichTextEditor value={editableContent} onChange={setEditableContent} className="min-h-[250px]" />}
+                        {resourceType === 'EXTERNAL_LINK' && (
+                            <div className="space-y-2">
+                                <Label>URL del Recurso</Label>
+                                <div className="relative">
+                                    <LinkIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                    <Input type="url" value={externalLink} onChange={e => setExternalLink(e.target.value)} placeholder="https://..." className="pl-9 h-11" />
+                                </div>
+                            </div>
+                        )}
+                        {resourceType === 'DOCUMENTO_EDITABLE' && <RichTextEditor value={editableContent} onChange={setEditableContent} className="min-h-[250px] bg-background" />}
                     </div>
                 </CardContent>
             </Card>
 
-            <Card className="overflow-hidden border-primary/20 bg-primary/5">
-                <CardHeader className="pb-3 text-center">
-                    <CardTitle className="text-base flex items-center justify-center gap-2">
-                        <BrainCircuit className="h-5 w-5 text-primary" /> Evaluación del Conocimiento
-                    </CardTitle>
-                    <CardDescription className="text-xs">Valida que el contenido ha sido comprendido mediante un examen rápido.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Button className="w-full bg-background hover:bg-muted border-primary/30 text-foreground" variant="outline" type="button" onClick={() => setIsQuizEditorOpen(true)}>
-                        {quiz ? <Edit className="mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                        {quiz ? 'Modificar Quiz Existente' : 'Añadir Quiz de Evaluación'}
+            <Card className="border-border/50 shadow-sm">
+                <CardContent className="p-0">
+                    <ResourcePermissions
+                        className="p-6"
+                        sharingMode={sharingMode}
+                        setSharingMode={setSharingMode}
+                        sharedWithUserIds={sharedWithUserIds}
+                        setSharedWithUserIds={setSharedWithUserIds}
+                        sharedWithProcessIds={sharedWithProcessIds}
+                        setSharedWithProcessIds={setSharedWithProcessIds}
+                        collaboratorIds={collaboratorIds}
+                        setCollaboratorIds={setCollaboratorIds}
+                        allUsers={allUsers}
+                        flattenedProcesses={flattenedProcesses}
+                    />
+                </CardContent>
+            </Card>
+
+            <Card className="border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/10">
+                <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className={cn("p-2 rounded-full transition-colors", quiz ? "bg-indigo-100 text-indigo-600" : "bg-background border")}>
+                            <BrainCircuit className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="font-semibold text-sm">Validación del Conocimiento</p>
+                            <p className="text-xs text-muted-foreground">{quiz ? 'Evaluación configurada' : 'Añadir quiz opcional al finalizar'}</p>
+                        </div>
+                    </div>
+                    <Button
+                        variant={quiz ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setIsQuizEditorOpen(true)}
+                        type="button"
+                        className={cn("transition-all", quiz ? "bg-indigo-600 hover:bg-indigo-700" : "")}
+                    >
+                        {quiz ? <Edit className="mr-2 h-3.5 w-3.5" /> : <PlusCircle className="mr-2 h-3.5 w-3.5" />}
+                        {quiz ? 'Editar Quiz' : 'Añadir Quiz'}
                     </Button>
                 </CardContent>
             </Card>
         </div>
     );
 
-    const AccessStep = () => {
-        return (
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Visibilidad y Audiencia</CardTitle>
-                        <CardDescription>Controla quién puede visualizar este recurso en la biblioteca.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <RadioGroup value={sharingMode} onValueChange={(v) => setSharingMode(v as ResourceSharingMode)} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="flex-1">
-                                <RadioGroupItem value="PUBLIC" id="share-public" className="sr-only" />
-                                <Label htmlFor="share-public" className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${sharingMode === 'PUBLIC' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-muted hover:border-primary/50'}`}>
-                                    <Globe className={`mb-2 h-6 w-6 ${sharingMode === 'PUBLIC' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                    <span className="text-sm font-medium">Público</span>
-                                </Label>
-                            </div>
-                            <div className="flex-1">
-                                <RadioGroupItem value="PROCESS" id="share-process" className="sr-only" />
-                                <Label htmlFor="share-process" className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${sharingMode === 'PROCESS' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-muted hover:border-primary/50'}`}>
-                                    <Briefcase className={`mb-2 h-6 w-6 ${sharingMode === 'PROCESS' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                    <span className="text-sm font-medium">Por Proceso</span>
-                                </Label>
-                            </div>
-                            <div className="flex-1">
-                                <RadioGroupItem value="PRIVATE" id="share-private" className="sr-only" />
-                                <Label htmlFor="share-private" className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all ${sharingMode === 'PRIVATE' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-muted hover:border-primary/50'}`}>
-                                    <Users className={`mb-2 h-6 w-6 ${sharingMode === 'PRIVATE' ? 'text-primary' : 'text-muted-foreground'}`} />
-                                    <span className="text-sm font-medium">Privado</span>
-                                </Label>
-                            </div>
-                        </RadioGroup>
-                        <AnimatePresence mode="wait">
-                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
-                                {sharingMode === 'PROCESS' && (<UserOrProcessList type="process" items={flattenedProcesses} selectedIds={sharedWithProcessIds} onSelectionChange={setSharedWithProcessIds} />)}
-                                {sharingMode === 'PRIVATE' && (<UserOrProcessList type="user" items={allUsers} selectedIds={sharedWithUserIds} onSelectionChange={setSharedWithUserIds} />)}
-                            </motion.div>
-                        </AnimatePresence>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base flex items-center gap-2"><Edit className="h-4 w-4 text-primary" /> Colaboración Editorial</CardTitle>
-                        <CardDescription className="text-xs">Permite a otros instructores o administradores editar y gestionar este recurso.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <UserOrProcessList type="user" items={allUsers.filter(u => u.role !== 'STUDENT')} selectedIds={collaboratorIds} onSelectionChange={setCollaboratorIds} />
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Ciclo de Vida y Notas</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label>Vencimiento del Recurso (Opcional)</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outline" className="w-full justify-start font-normal h-11">
-                                        <CalendarIcon className="mr-2 h-4 w-4 opacity-70" />
-                                        {expiresAt ? format(expiresAt, "PPP", { locale: es }) : <span className="text-muted-foreground">Disponible indefinidamente (Nunca expira)</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar mode="single" selected={expiresAt} onSelect={setExpiresAt} initialFocus locale={es} />
-                                    {expiresAt && <div className="p-2 border-t text-center"><Button variant="ghost" size="sm" onClick={() => setExpiresAt(undefined)} className="h-8 text-xs text-destructive">Limpiar fecha</Button></div>}
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="observations">Observaciones Administrativas (Privado)</Label>
-                            <Textarea id="observations" value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} placeholder="Notas visibles solo para administradores y colaboradores." />
-                        </div>
-                    </CardContent>
-                </Card>
+    const SelectionCard = ({ value, current, onChange, icon: Icon, title, description, id }: any) => (
+        <div
+            onClick={() => onChange(value)}
+            className={cn(
+                "cursor-pointer rounded-xl border-2 p-4 transition-all duration-200 hover:scale-[1.02] flex flex-col items-center text-center gap-3 relative",
+                current === value ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-md" : "border-border hover:border-primary/50 hover:bg-muted/50"
+            )}
+        >
+            <div className={cn("p-3 rounded-full transition-colors", current === value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                <Icon className="h-6 w-6" />
             </div>
-        );
-    };
-
-    const renderFolderEdit = () => (
-        <form id="resource-form" onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
-            <ScrollArea className="flex-1 min-h-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 px-6 py-4">
-                    <div className="md:col-span-1 h-full flex flex-col">
-                        <InfoStep />
-                        <div className="mt-6">
-                            <AccessStep />
-                        </div>
-                    </div>
-                    <div className="md:col-span-1 h-full flex flex-col bg-muted/50 border-l p-4 rounded-xl">
-                        <div className="border-b flex-shrink-0 flex items-center justify-between pb-4">
-                            <h3 className="font-semibold flex items-center gap-2"><PlusCircle className="h-4 w-4 text-primary" /> Contenido de la Carpeta</h3>
-                        </div>
-                        <div className="flex-1 min-h-0 mt-4 overflow-y-auto">
-                            {isLoadingFolderContent ? <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
-                                : <FolderContentView items={folderContent} onEdit={() => { }} onDelete={() => { }} />}
-                        </div>
-                    </div>
-                </div>
-            </ScrollArea>
-            <DialogFooter className="p-6 pt-4 border-t flex-shrink-0 flex-row justify-end gap-2 bg-background">
-                <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>Cancelar</Button>
-                <Button type="submit" disabled={isSaving || !title.trim()}>
-                    {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Save className="mr-2 h-4 w-4" />Guardar Cambios
-                </Button>
-            </DialogFooter>
-        </form>
-    );
-
-    const renderCreationWizard = () => (
-        <form id="resource-form" onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
-            <ProgressBar currentStep={creationStep} />
-            <ScrollArea className="flex-1 min-h-0">
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={creationStep}
-                        initial={{ x: 300, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: -300, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: 'easeInOut' }}
-                        className="px-6 py-4"
-                    >
-                        {creationStep === 1 && <InfoStep />}
-                        {creationStep === 2 && <ContentStep />}
-                        {creationStep === 3 && <AccessStep />}
-                    </motion.div>
-                </AnimatePresence>
-            </ScrollArea>
-            <DialogFooter className="p-6 pt-4 border-t flex-shrink-0 flex-row justify-between">
-                <Button type="button" variant="outline" onClick={() => creationStep === 1 ? onClose() : setCreationStep(p => p - 1)} disabled={isSaving}>
-                    {creationStep > 1 && <ArrowLeft className="mr-2 h-4 w-4" />} {creationStep === 1 ? 'Cancelar' : 'Anterior'}
-                </Button>
-                {creationStep < STEPS.length ? (
-                    <Button type="button" onClick={() => setCreationStep(p => p + 1)} disabled={(creationStep === 1 && !isStep1Valid) || (creationStep === 2 && !isStep2Valid)}>Siguiente <ArrowRight className="ml-2 h-4 w-4" /></Button>
-                ) : (
-                    <Button type="submit" disabled={isSaving || !isStep2Valid}>
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Crear Recurso
-                    </Button>
-                )}
-            </DialogFooter>
-        </form>
-    );
-
-    const renderEditTabs = () => (
-        <form id="resource-form" onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
-            <Tabs defaultValue={activeEditTab} onValueChange={setActiveEditTab} className="flex-1 min-h-0 flex flex-col">
-                <div className="px-6 pt-2 flex-shrink-0">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="info">Información</TabsTrigger>
-                        <TabsTrigger value="content">Recurso / Quiz</TabsTrigger>
-                        <TabsTrigger value="config">Acceso</TabsTrigger>
-                    </TabsList>
-                </div>
-                <ScrollArea className="flex-1 min-h-[300px] overflow-y-auto">
-                    <div className="px-6 py-4">
-                        <TabsContent value="info" className="mt-0 focus-visible:outline-none"><InfoStep /></TabsContent>
-                        <TabsContent value="content" className="mt-0 focus-visible:outline-none"><ContentStep /></TabsContent>
-                        <TabsContent value="config" className="mt-0 focus-visible:outline-none"><AccessStep /></TabsContent>
-                    </div>
-                </ScrollArea>
-                <DialogFooter className="p-6 pt-4 border-t flex-shrink-0 flex-row justify-end gap-2 bg-background">
-                    <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>Cancelar</Button>
-                    <Button type="submit" disabled={isSaving || !isStep2Valid}>
-                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        <Save className="mr-2 h-4 w-4" />Guardar Cambios
-                    </Button>
-                </DialogFooter>
-            </Tabs>
-        </form>
+            <div>
+                <h4 className={cn("font-bold text-sm", current === value ? "text-primary" : "text-foreground")}>{title}</h4>
+                <p className="text-xs text-muted-foreground mt-1 leading-snug">{description}</p>
+            </div>
+            {current === value && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary animate-pulse" />}
+        </div>
     );
 
     return (
-        <>
-            <Dialog open={isOpen} onOpenChange={onClose}>
-                <DialogContent className="w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-2xl max-h-[90vh] flex flex-col">
-                    <DialogHeader className="p-6 pb-2 border-b flex-shrink-0">
-                        <DialogTitle>{isEditing ? (isEditingFolder ? 'Editar Carpeta' : 'Editar Recurso') : 'Nuevo Recurso'}</DialogTitle>
-                    </DialogHeader>
-                    {isEditing && isEditingFolder ? renderFolderEdit() : isEditing ? renderEditTabs() : renderCreationWizard()}
-                </DialogContent>
-            </Dialog>
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="w-[98vw] sm:max-w-4xl p-0 gap-0 rounded-2xl max-h-[92vh] flex flex-col bg-background/95 backdrop-blur-xl border-border/50">
+                <DialogHeader className="px-8 py-5 border-b flex-shrink-0 bg-background/50">
+                    <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-primary/10">
+                            {isEditing ? <Edit className="h-6 w-6 text-primary" /> : <PlusCircle className="h-6 w-6 text-primary" />}
+                        </div>
+                        {isEditing ? (isEditingFolder ? 'Editar Carpeta' : 'Editar Recurso') : 'Nuevo Recurso'}
+                    </DialogTitle>
+                    {!isEditing && <div className="pt-6"><ProgressBar currentStep={creationStep} /></div>}
+                </DialogHeader>
+
+                {isEditing ? (
+                    <form id="resource-form" onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
+                        <Tabs value={activeEditTab} onValueChange={setActiveEditTab} className="flex-1 min-h-0 flex flex-col">
+                            <div className="px-6 py-2 border-b bg-muted/20">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="info">Información</TabsTrigger>
+                                    <TabsTrigger value="content">Contenido</TabsTrigger>
+                                </TabsList>
+                            </div>
+                            <ScrollArea className="flex-1">
+                                <div className="p-6 md:p-8">
+                                    <TabsContent value="info" className="mt-0 focus-visible:outline-none"><InfoStep /></TabsContent>
+                                    <TabsContent value="content" className="mt-0 focus-visible:outline-none"><ContentStep /></TabsContent>
+                                    <TabsContent value="config" className="mt-0"><ContentStep /></TabsContent>
+                                </div>
+                            </ScrollArea>
+                            <DialogFooter className="p-6 pt-4 border-t flex-shrink-0 flex-row justify-end gap-2 bg-background/50">
+                                <Button variant="ghost" onClick={onClose} disabled={isSaving}>Cancelar</Button>
+                                <Button type="submit" disabled={isSaving || !isStep1Valid} className="shadow-lg shadow-primary/20">
+                                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                    Guardar Cambios
+                                </Button>
+                            </DialogFooter>
+                        </Tabs>
+                    </form>
+                ) : (
+                    <form id="resource-form" onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
+                        <ScrollArea className="flex-1">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={creationStep}
+                                    initial={{ x: 20, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    exit={{ x: -20, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="p-6 md:p-8"
+                                >
+                                    {creationStep === 1 && <InfoStep />}
+                                    {creationStep === 2 && <ContentStep />}
+                                </motion.div>
+                            </AnimatePresence>
+                        </ScrollArea>
+                        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0 flex-row justify-between bg-background/50 backdrop-blur-sm">
+                            <Button type="button" variant="outline" onClick={() => creationStep === 1 ? onClose() : setCreationStep(p => p - 1)} disabled={isSaving}>
+                                {creationStep > 1 && <ArrowLeft className="mr-2 h-4 w-4" />} {creationStep === 1 ? 'Cancelar' : 'Anterior'}
+                            </Button>
+                            {creationStep < STEPS.length ? (
+                                <Button type="button" onClick={() => setCreationStep(p => p + 1)} disabled={!isStep1Valid}>
+                                    Siguiente <ArrowRight className="ml-2 h-4 w-4" />
+                                </Button>
+                            ) : (
+                                <Button type="submit" disabled={isSaving || !isStep2Valid} className="shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90">
+                                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                    Crear Recurso
+                                </Button>
+                            )}
+                        </DialogFooter>
+                    </form>
+                )}
+            </DialogContent>
+
             {isQuizEditorOpen && (
                 <QuizEditorModal
                     isOpen={isQuizEditorOpen}
@@ -678,36 +612,11 @@ export function ResourceEditorModal({ isOpen, onClose, resource, parentId, onSav
                     }}
                 />
             )}
-        </>
+        </Dialog>
     );
 }
 
 const UserOrProcessList = ({ type, items, selectedIds, onSelectionChange }: { type: 'user' | 'process', items: any[], selectedIds: string[], onSelectionChange: (ids: string[]) => void }) => {
-    const [search, setSearch] = useState('');
-    const filteredItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()));
-
-    const handleSelection = (id: string, checked: boolean) => {
-        onSelectionChange(checked ? [...selectedIds, id] : selectedIds.filter(i => i !== id));
-    };
-
-    return (
-        <Card className="mt-4">
-            <CardContent className="p-4 space-y-3">
-                <Input placeholder={`Buscar ${type === 'user' ? 'usuario' : 'proceso'}...`} value={search} onChange={e => setSearch(e.target.value)} />
-                <ScrollArea className="h-60 overflow-y-auto">
-                    <div className="space-y-1 pr-4">
-                        {filteredItems.map(item => (
-                            <div key={item.id} className="flex items-center space-x-3 p-1.5 rounded-md hover:bg-muted">
-                                <Checkbox id={`${type}-${item.id}`} checked={selectedIds.includes(item.id)} onCheckedChange={(c) => handleSelection(item.id, !!c)} />
-                                <Label htmlFor={`${type}-${item.id}`} className="flex items-center gap-2 font-normal cursor-pointer text-sm">
-                                    {type === 'user' && <Avatar className="h-7 w-7"><AvatarImage src={item.avatar || undefined} /><AvatarFallback><Identicon userId={item.id} /></AvatarFallback></Avatar>}
-                                    <span style={{ paddingLeft: `${type === 'process' ? (item.level || 0) * 1.5 : 0}rem` }}>{item.name}</span>
-                                </Label>
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-            </CardContent>
-        </Card>
-    );
+    // Legacy mapping if needed, or replace usages with UserOrProcessList from shared
+    return null;
 };

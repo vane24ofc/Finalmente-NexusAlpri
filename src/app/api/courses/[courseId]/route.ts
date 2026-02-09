@@ -3,7 +3,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import type { Course as AppCourse, Module as AppModule, Lesson as AppLesson, ContentBlock, Quiz as AppQuiz, Question as AppQuestion, AnswerOption as AppAnswerOption } from '@/types';
+import type { User, Course as AppCourse, Module as AppModule, Lesson as AppLesson, ContentBlock, Quiz as AppQuiz, Question as AppQuestion, AnswerOption as AppAnswerOption } from '@/types';
 import { checkCourseOwnership } from "@/lib/auth-utils";
 import { supabaseAdmin } from "@/lib/supabase-client";
 
@@ -16,6 +16,7 @@ export async function GET(
 ) {
   const { courseId } = params;
   try {
+    console.log(`[GET_COURSE_ID] Fetching course: ${courseId}`);
     const course = await prisma.course.findUnique({
       where: { id: courseId },
       include: {
@@ -50,20 +51,28 @@ export async function GET(
     });
 
     if (!course) {
+      console.warn(`[GET_COURSE_ID] Course not found: ${courseId}`);
       return NextResponse.json(
         { message: "Curso no encontrado" },
         { status: 404 }
       );
     }
-    
-    // Asegurarse de que `modules` sea siempre un array
-    const courseWithSafeModules = { ...course, modules: course.modules || [] };
-    
+
+    // Asegurarse de que `modules` sea siempre un array y otros datos sean seguros
+    const courseWithSafeModules = {
+      ...course,
+      modules: course.modules || [],
+      description: course.description || '',
+      imageUrl: course.imageUrl || null
+    };
+
+    console.log(`[GET_COURSE_ID] Successfully fetched course: ${courseId} with ${courseWithSafeModules.modules.length} modules`);
     return NextResponse.json(courseWithSafeModules);
   } catch (error) {
-    console.error(`[GET_COURSE_ID: ${courseId}]`, error);
+    console.error(`[GET_COURSE_ID_ERROR] Error fetching course ${courseId}:`, error);
+    // Devuelve un error JSON válido para que el cliente no se rompa con un 500 genérico vacío
     return NextResponse.json(
-      { message: "Error al obtener el curso" },
+      { message: "Error interno al obtener el curso", error: (error as Error).message },
       { status: 500 }
     );
   }
@@ -80,15 +89,15 @@ export async function PUT(
   }
 
   const { courseId } = params;
-  
-  if (!(await checkCourseOwnership(session, courseId))) {
-      return NextResponse.json({ message: 'No tienes permiso para actualizar este curso' }, { status: 403 });
+
+  if (!(await checkCourseOwnership(session as unknown as User, courseId))) {
+    return NextResponse.json({ message: 'No tienes permiso para actualizar este curso' }, { status: 403 });
   }
 
   try {
     const body: AppCourse = await req.json();
     const { modules, ...courseData } = body;
-    
+
     await prisma.$transaction(async (tx) => {
       // 1. Update course-level data
       await tx.course.update({
@@ -107,7 +116,7 @@ export async function PUT(
           prerequisiteId: courseData.prerequisiteId,
         },
       });
-      
+
       // 2. Clean slate: Delete all existing modules for this course
       await tx.module.deleteMany({ where: { courseId } });
 
@@ -156,7 +165,7 @@ export async function PUT(
                   data: {
                     text: questionData.text,
                     order: qIndex,
-                    type: questionData.type,
+                    type: questionData.type as any,
                     imageUrl: questionData.imageUrl,
                     template: questionData.template,
                     quizId: newQuiz.id,
@@ -187,12 +196,12 @@ export async function PUT(
 
     // Devolver el estado completo y actualizado del curso
     const finalCourseState = await prisma.course.findUnique({
-        where: { id: courseId },
-        include: {
-            instructor: { select: { id: true, name: true, avatar: true } },
-            prerequisite: { select: { id: true, title: true } },
-            modules: { orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" }, include: { contentBlocks: { orderBy: { order: "asc" }, include: { quiz: { include: { questions: { orderBy: { order: "asc" }, include: { options: { orderBy: { id: "asc" } } } } } } } } } } } }
-        },
+      where: { id: courseId },
+      include: {
+        instructor: { select: { id: true, name: true, avatar: true } },
+        prerequisite: { select: { id: true, title: true } },
+        modules: { orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" }, include: { contentBlocks: { orderBy: { order: "asc" }, include: { quiz: { include: { questions: { orderBy: { order: "asc" }, include: { options: { orderBy: { id: "asc" } } } } } } } } } } } }
+      },
     });
 
     return NextResponse.json(finalCourseState);
@@ -213,50 +222,50 @@ export async function DELETE(
   }
 
   const { courseId } = params;
-  
-  if (!(await checkCourseOwnership(session, courseId))) {
-      return NextResponse.json({ message: 'No tienes permiso para eliminar este curso' }, { status: 403 });
+
+  if (!(await checkCourseOwnership(session as unknown as User, courseId))) {
+    return NextResponse.json({ message: 'No tienes permiso para eliminar este curso' }, { status: 403 });
   }
 
   try {
     await prisma.$transaction(async (tx) => {
-        // 1. Encontrar todos los anuncios que mencionan este curso para obtener sus IDs
-        const announcementsToDelete = await tx.announcement.findMany({
-            where: { content: { contains: `/courses/${courseId}` } },
-            select: { id: true }
-        });
-        const announcementIds = announcementsToDelete.map(a => a.id);
+      // 1. Encontrar todos los anuncios que mencionan este curso para obtener sus IDs
+      const announcementsToDelete = await tx.announcement.findMany({
+        where: { content: { contains: `/courses/${courseId}` } },
+        select: { id: true }
+      });
+      const announcementIds = announcementsToDelete.map(a => a.id);
 
-        // 2. Eliminar todas las notificaciones relacionadas
-        await tx.notification.deleteMany({
-            where: {
-                OR: [
-                    { link: `/courses/${courseId}` },
-                    { link: `/manage-courses/${courseId}/edit` },
-                    { announcementId: { in: announcementIds } }
-                ]
-            }
-        });
-
-        // 3. Eliminar los anuncios en sí
-        if (announcementIds.length > 0) {
-            await tx.announcement.deleteMany({ where: { id: { in: announcementIds } } });
+      // 2. Eliminar todas las notificaciones relacionadas
+      await tx.notification.deleteMany({
+        where: {
+          OR: [
+            { link: `/courses/${courseId}` },
+            { link: `/manage-courses/${courseId}/edit` },
+            { announcementId: { in: announcementIds } }
+          ]
         }
+      });
 
-        // 4. Eliminar asignaciones de cursos
-        await tx.courseAssignment.deleteMany({ where: { courseId: courseId } });
+      // 3. Eliminar los anuncios en sí
+      if (announcementIds.length > 0) {
+        await tx.announcement.deleteMany({ where: { id: { in: announcementIds } } });
+      }
 
-        // 5. Finalmente, eliminar el curso
-        await tx.course.delete({ where: { id: courseId } });
+      // 4. Eliminar asignaciones de cursos
+      await tx.courseAssignment.deleteMany({ where: { courseId: courseId } });
+
+      // 5. Finalmente, eliminar el curso
+      await tx.course.delete({ where: { id: courseId } });
     });
-    
+
     if (supabaseAdmin) {
-        const channel = supabaseAdmin.channel('courses');
-        await channel.send({
-            type: 'broadcast',
-            event: 'course_deleted',
-            payload: { id: courseId },
-        });
+      const channel = supabaseAdmin.channel('courses');
+      await channel.send({
+        type: 'broadcast',
+        event: 'course_deleted',
+        payload: { id: courseId },
+      });
     }
 
     return new NextResponse(null, { status: 204 });
